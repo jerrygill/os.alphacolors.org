@@ -1,5 +1,14 @@
 import { ScheduleItem } from './types';
 
+const safeJsonParse = (val: string | null, fallback: any) => {
+    if (!val) return fallback;
+    try {
+        return JSON.parse(val);
+    } catch {
+        return fallback;
+    }
+};
+
 const STORAGE_KEY_PREFIX = 'os-overrides-';
 
 export interface OverrideData {
@@ -16,7 +25,7 @@ export function saveOverride(weekKey: string, id: string, value: string) {
     if (typeof window === 'undefined') return;
 
     const key = getStorageKey(weekKey);
-    const current = JSON.parse(localStorage.getItem(key) || '{}');
+    const current = safeJsonParse(localStorage.getItem(key), {});
     current[id] = value;
     localStorage.setItem(key, JSON.stringify(current));
 }
@@ -24,7 +33,7 @@ export function saveOverride(weekKey: string, id: string, value: string) {
 export function getOverrides(weekKey: string): OverrideData {
     if (typeof window === 'undefined') return {};
     const key = getStorageKey(weekKey);
-    return JSON.parse(localStorage.getItem(key) || '{}');
+    return safeJsonParse(localStorage.getItem(key), {});
 }
 
 export function clearOverrides(weekKey: string) {
@@ -46,7 +55,7 @@ export function addCustomAct(weekKey: string, act: CustomAct) {
 export function getCustomActs(weekKey: string): CustomAct[] {
     if (typeof window === 'undefined') return [];
     const key = `${ACTS_KEY_PREFIX}${weekKey}`;
-    return JSON.parse(localStorage.getItem(key) || '[]');
+    return safeJsonParse(localStorage.getItem(key), []);
 }
 
 export function removeCustomAct(weekKey: string, actId: string) {
