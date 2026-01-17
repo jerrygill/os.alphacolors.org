@@ -19,8 +19,8 @@ export default function ServiceHeader({ data }: ServiceHeaderProps) {
         <div ref={containerRef} className="w-full max-w-6xl mx-auto mb-12 opacity-0 animate-fade-in" style={{ animationFillMode: 'forwards' }}>
 
             {/* Global Brand Logo - Large and Centered */}
-            <div className="flex justify-center mb-10">
-                <div className="relative w-64 h-24 md:w-80 md:h-28">
+            <div className="flex justify-center mb-6 md:mb-10 pt-4 md:pt-0">
+                <div className="relative w-56 h-16 md:w-80 md:h-28">
                     <Image
                         src="/ALPHACOLORS_logo-black.png"
                         alt="Alpha Colors Logo"
