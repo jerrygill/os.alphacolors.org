@@ -27,7 +27,9 @@ function getConnectionString(): string | undefined {
         // Fallback: assemble from individual PG* vars
         (process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD && process.env.PGDATABASE
             ? `postgresql://${process.env.PGUSER}:${process.env.PGPASSWORD}@${process.env.PGHOST}/${process.env.PGDATABASE}?sslmode=require`
-            : undefined)
+            : undefined) ||
+        // Hardcoded fallback for Neon Serverless
+        'postgresql://neondb_owner:npg_AMNGye13BOPw@ep-hidden-boat-a1l4v2ws-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require'
     );
 }
 
