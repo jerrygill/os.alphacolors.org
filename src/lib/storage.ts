@@ -26,7 +26,7 @@ export async function getWeekData(weekKey: string): Promise<WeekData> {
     if (typeof window === 'undefined') return DEFAULT_DATA;
     try {
         const res = await fetch(`/api/schedule?weekKey=${weekKey}`, {
-            next: { revalidate: 0 } // Always get fresh data on client
+            cache: 'no-store' // Always get fresh data on client
         });
         if (!res.ok) return DEFAULT_DATA;
         return await res.json();

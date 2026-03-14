@@ -14,10 +14,21 @@ const DEFAULT_DATA: WeekData = {
     rowOrder: null,
 };
 
-// Initialize Redis only if we have the URL
-let redis: Redis | null = null;
-if (process.env.REDIS_URL) {
-    redis = new Redis(process.env.REDIS_URL);
+// Use a lazy singleton to avoid module-level initialization issues with Next.js runtime
+let _redis: Redis | null = null;
+function getRedis(): Redis | null {
+    if (!process.env.REDIS_URL) return null;
+    if (!_redis) {
+        _redis = new Redis(process.env.REDIS_URL, {
+            maxRetriesPerRequest: 3,
+            connectTimeout: 5000,
+            lazyConnect: false,
+        });
+        _redis.on('error', (err) => {
+            console.error('Redis connection error:', err);
+        });
+    }
+    return _redis;
 }
 
 export async function GET(req: NextRequest) {
@@ -28,8 +39,9 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'weekKey is required' }, { status: 400 });
     }
 
+    const redis = getRedis();
     if (!redis) {
-        // If Redis isn't configured yet, gracefully return empty data
+        console.warn('GET /api/schedule: REDIS_URL not configured, returning default data.');
         return NextResponse.json(DEFAULT_DATA);
     }
 
@@ -37,11 +49,15 @@ export async function GET(req: NextRequest) {
         const key = `os-week-${weekKey}`;
         const raw = await redis.get(key);
         const data = raw ? JSON.parse(raw) as WeekData : DEFAULT_DATA;
-        
-        return NextResponse.json(data);
+
+        return NextResponse.json(data, {
+            headers: {
+                'Cache-Control': 'no-store, max-age=0',
+            }
+        });
     } catch (error) {
-        console.error('Error fetching from Redis:', error);
-        return NextResponse.json(DEFAULT_DATA); // Fallback to empty on error
+        console.error('Redis GET error:', error);
+        return NextResponse.json(DEFAULT_DATA);
     }
 }
 
@@ -53,31 +69,31 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'weekKey is required' }, { status: 400 });
     }
 
+    const redis = getRedis();
     if (!redis) {
-        console.warn('Cannot save: REDIS_URL is not configured.');
-        return NextResponse.json({ success: false, message: 'Redis not configured' }, { status: 500 });
+        console.warn('POST /api/schedule: REDIS_URL not configured, cannot save.');
+        return NextResponse.json({ success: false, message: 'Redis not configured' }, { status: 503 });
     }
 
     try {
         const body = await req.json() as Partial<WeekData>;
         const key = `os-week-${weekKey}`;
-        
-        // Fetch existing first to merge
+
+        // Fetch existing data first to merge (so individual saves don't overwrite each other)
         const raw = await redis.get(key);
-        const existing = raw ? JSON.parse(raw) as WeekData : DEFAULT_DATA;
-        
+        const existing: WeekData = raw ? JSON.parse(raw) : DEFAULT_DATA;
+
         const merged: WeekData = {
             overrides: body.overrides ?? existing.overrides,
             customActs: body.customActs ?? existing.customActs,
             rowOrder: body.rowOrder !== undefined ? body.rowOrder : existing.rowOrder,
         };
 
-        // Save to Redis (as a string)
         await redis.set(key, JSON.stringify(merged));
 
         return NextResponse.json({ success: true, data: merged });
     } catch (error) {
-        console.error('Error saving to Redis:', error);
+        console.error('Redis POST error:', error);
         return NextResponse.json({ error: 'Failed to save data' }, { status: 500 });
     }
 }

@@ -44,7 +44,7 @@ export default function EditableCell({ initialValue, onSave, isOverridden, multi
             return (
                 <textarea
                     ref={inputRef as any}
-                    className="w-full px-2 py-1 bg-white border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-200 resize-y min-h-[100px]"
+                    className="w-full px-2 py-1 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 resize-y min-h-[100px]"
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
                     onBlur={handleBlur}
@@ -57,7 +57,7 @@ export default function EditableCell({ initialValue, onSave, isOverridden, multi
             <input
                 ref={inputRef}
                 type="text"
-                className="w-full px-2 py-1 bg-white border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full px-2 py-1 bg-white dark:bg-zinc-800 text-gray-900 dark:text-white border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 onBlur={handleBlur}
