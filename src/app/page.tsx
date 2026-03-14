@@ -24,7 +24,7 @@ export default function Home() {
 
                 // Fetch Cloud Sync Data
                 const weekData: WeekData = await getWeekData(weekKey);
-                const { overrides, customActs } = weekData;
+                const { overrides, customActs, rowOrder } = weekData;
 
                 // Apply Host Override
                 if (overrides['host']) sheetData.host = overrides['host'];
@@ -41,7 +41,7 @@ export default function Home() {
                 });
 
                 // Apply Schedule Overrides and Merge Custom Acts dynamically
-                sheetData.schedule = recalculateSchedule(sheetData.schedule, overrides, customActs);
+                sheetData.schedule = recalculateSchedule(sheetData.schedule, overrides, customActs, rowOrder);
 
                 setData(sheetData);
             } catch (error) {
