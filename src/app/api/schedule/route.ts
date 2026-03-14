@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPool } from '@vercel/postgres';
+import { neon } from '@neondatabase/serverless';
 import { OverrideData, CustomAct } from '@/lib/storage';
 
 export interface WeekData {
@@ -14,41 +14,21 @@ const DEFAULT_DATA: WeekData = {
     rowOrder: null,
 };
 
-// Resolve the connection string from any possible Vercel env var prefix
+// Resolve the connection string from any possible env var name
 function getConnectionString(): string | undefined {
-    // Try all known Vercel/Neon env var names
-    const directUrl =
+    return (
         process.env.POSTGRES_URL ||
         process.env.DATABASE_URL ||
         process.env.STORAGE_URL ||
         process.env.NEON_DATABASE_URL ||
         process.env.POSTGRES_URL_NON_POOLING ||
         process.env.POSTGRES_URL_NO_SSL ||
-        process.env.DATABASE_URL_UNPOOLED;
-
-    if (directUrl) return directUrl;
-
-    // Fallback: assemble from individual PG* vars
-    const host = process.env.PGHOST;
-    const user = process.env.PGUSER;
-    const password = process.env.PGPASSWORD;
-    const database = process.env.PGDATABASE;
-    if (host && user && password && database) {
-        return `postgresql://${user}:${password}@${host}/${database}?sslmode=require`;
-    }
-
-    return undefined;
-}
-
-// Lazy singleton pool
-let _pool: ReturnType<typeof createPool> | null = null;
-function getPool() {
-    const connStr = getConnectionString();
-    if (!connStr) return null;
-    if (!_pool) {
-        _pool = createPool({ connectionString: connStr });
-    }
-    return _pool;
+        process.env.DATABASE_URL_UNPOOLED ||
+        // Fallback: assemble from individual PG* vars
+        (process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD && process.env.PGDATABASE
+            ? `postgresql://${process.env.PGUSER}:${process.env.PGPASSWORD}@${process.env.PGHOST}/${process.env.PGDATABASE}?sslmode=require`
+            : undefined)
+    );
 }
 
 export async function GET(req: NextRequest) {
@@ -59,14 +39,14 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'weekKey is required' }, { status: 400 });
     }
 
-    const pool = getPool();
-    if (!pool) {
-        console.warn('No database connection string found in environment');
+    const connStr = getConnectionString();
+    if (!connStr) {
         return NextResponse.json(DEFAULT_DATA, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
     }
 
     try {
-        const { rows } = await pool.sql`
+        const sql = neon(connStr);
+        const rows = await sql`
             SELECT data FROM os_schedule_data 
             WHERE week_key = ${weekKey} 
             LIMIT 1;
@@ -81,7 +61,7 @@ export async function GET(req: NextRequest) {
         if (error.message && error.message.includes('does not exist')) {
             return NextResponse.json(DEFAULT_DATA, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
         }
-        console.error('Postgres GET error:', error);
+        console.error('Neon GET error:', error);
         return NextResponse.json(DEFAULT_DATA, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
     }
 }
@@ -94,24 +74,23 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'weekKey is required' }, { status: 400 });
     }
 
-    const pool = getPool();
-    if (!pool) {
+    const connStr = getConnectionString();
+    if (!connStr) {
         const debugVars = {
             POSTGRES_URL: !!process.env.POSTGRES_URL,
             DATABASE_URL: !!process.env.DATABASE_URL,
             STORAGE_URL: !!process.env.STORAGE_URL,
             PGHOST: !!process.env.PGHOST,
-            PGUSER: !!process.env.PGUSER,
-            PGPASSWORD: !!process.env.PGPASSWORD,
-            PGDATABASE: !!process.env.PGDATABASE,
         };
-        console.error('POST: No DB connection string found. Env var check:', JSON.stringify(debugVars));
+        console.error('POST: No connection string found:', JSON.stringify(debugVars));
         return NextResponse.json({ error: 'Database not configured', debug: debugVars }, { status: 503 });
     }
 
     try {
+        const sql = neon(connStr);
+
         // 1. Ensure table exists
-        await pool.sql`
+        await sql`
             CREATE TABLE IF NOT EXISTS os_schedule_data (
                 week_key VARCHAR(50) PRIMARY KEY,
                 data JSONB NOT NULL,
@@ -120,9 +99,9 @@ export async function POST(req: NextRequest) {
         `;
 
         const body = await req.json() as Partial<WeekData>;
-        
+
         // 2. Fetch existing
-        const { rows } = await pool.sql`SELECT data FROM os_schedule_data WHERE week_key = ${weekKey} LIMIT 1;`;
+        const rows = await sql`SELECT data FROM os_schedule_data WHERE week_key = ${weekKey} LIMIT 1;`;
         const existing: WeekData = rows.length > 0 ? (rows[0].data as WeekData) : DEFAULT_DATA;
 
         // 3. Merge
@@ -133,7 +112,7 @@ export async function POST(req: NextRequest) {
         };
 
         // 4. Upsert
-        await pool.sql`
+        await sql`
             INSERT INTO os_schedule_data (week_key, data, updated_at)
             VALUES (${weekKey}, ${JSON.stringify(merged)}, CURRENT_TIMESTAMP)
             ON CONFLICT (week_key) 
@@ -144,7 +123,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ success: true, data: merged });
     } catch (error) {
-        console.error('Postgres POST error:', error);
+        console.error('Neon POST error:', error);
         return NextResponse.json({ error: 'Failed to save data' }, { status: 500 });
     }
 }
