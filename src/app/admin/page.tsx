@@ -122,10 +122,28 @@ export default function AdminPage() {
     };
 
     const handleDeleteAct = async (id: string) => {
-        if (confirm('Are you sure you want to delete this added item?')) {
-            const newActs = customActs.filter(a => a.id !== id);
-            setCustomActs(newActs); // Optimistic UI
-            await saveWeekData(currentWeekKey, { customActs: newActs });
+        if (!confirm('Are you sure you want to delete this custom item?')) return;
+        const newActs = customActs.filter(a => a.id !== id);
+        setCustomActs(newActs);
+        await saveWeekData(currentWeekKey, { overrides, customActs: newActs, rowOrder });
+    };
+
+    const handleDeleteRow = async (item: any) => { // Using 'any' for ScheduleItem as it's not imported here
+        if (!confirm(`Are you sure you want to remove "${item.event}" from this week's schedule?`)) return;
+        
+        if (item.isCustom) {
+            // Completely delete custom acts
+            const newActs = customActs.filter(a => a.id !== item.id);
+            setCustomActs(newActs);
+            await saveWeekData(currentWeekKey, { overrides, customActs: newActs, rowOrder });
+        } else {
+            // Hide base rows by adding a 'hidden: true' override
+            const newOverrides = {
+                ...overrides,
+                [`${item.id}-hidden`]: 'true'
+            };
+            setOverrides(newOverrides);
+            await saveWeekData(currentWeekKey, { overrides: newOverrides, customActs, rowOrder });
         }
     };
 
@@ -282,11 +300,12 @@ export default function AdminPage() {
                                                 isOverridden={!!overrides[`${item.id}-duration`]}
                                             />
                                         </td>
-                                        <td className="p-4 align-top font-bold">
+                                        <td className="p-4 align-top font-bold whitespace-pre-wrap">
                                             <EditableCell
                                                 initialValue={item.event}
                                                 onSave={(v) => handleCellSave(`${item.id}-event`, v)}
                                                 isOverridden={!!overrides[`${item.id}-event`]}
+                                                multiline={true}
                                             />
                                         </td>
                                         <td className="p-4 align-top">
@@ -296,11 +315,12 @@ export default function AdminPage() {
                                                 isOverridden={!!overrides[`${item.id}-host`]}
                                             />
                                         </td>
-                                        <td className="p-4 align-top text-sm">
+                                        <td className="p-4 align-top text-sm whitespace-pre-wrap">
                                             <EditableCell
                                                 initialValue={item.remarks}
                                                 onSave={(v) => handleCellSave(`${item.id}-remarks`, v)}
                                                 isOverridden={!!overrides[`${item.id}-remarks`]}
+                                                multiline={true}
                                             />
                                         </td>
                                         <td className="p-4 align-top text-center space-y-2">
@@ -322,15 +342,13 @@ export default function AdminPage() {
                                                     ⬇️
                                                 </button>
                                             </div>
-                                            {item.isCustom && (
-                                                <button
-                                                    onClick={() => handleDeleteAct(item.id)}
-                                                    className="block w-full text-red-500 hover:text-red-700 p-1 bg-white dark:bg-zinc-800 rounded shadow-sm border border-red-100 dark:border-red-900/30"
-                                                    title="Delete custom item"
-                                                >
-                                                    🗑️
-                                                </button>
-                                            )}
+                                            <button
+                                                onClick={() => handleDeleteRow(item)}
+                                                className="block w-full text-red-500 hover:text-red-700 p-1 bg-white dark:bg-zinc-800 rounded shadow-sm border border-red-100 dark:border-red-900/30"
+                                                title={item.isCustom ? "Delete custom row permanently" : "Hide this row for this week"}
+                                            >
+                                                🗑️
+                                            </button>
                                             <button
                                                 onClick={() => {
                                                     if (insertingAfterId === item.id && duplicatingItemData) {

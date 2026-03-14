@@ -10,27 +10,31 @@ export function recalculateSchedule(
 ): ScheduleItem[] {
     if (!baseSchedule || baseSchedule.length === 0) return [...customActs];
 
-    // 1. Apply raw overrides to base schedule directly
-    let mergedSchedule = baseSchedule.map(item => ({
-        ...item,
-        timeFrom: overrides[`${item.id}-timeFrom`] || item.timeFrom,
-        timeTo: overrides[`${item.id}-timeTo`] || item.timeTo,
-        duration: overrides[`${item.id}-duration`] || item.duration,
-        event: overrides[`${item.id}-event`] || item.event,
-        host: overrides[`${item.id}-host`] || item.host,
-        remarks: overrides[`${item.id}-remarks`] || item.remarks,
-    }));
+    // 1. Apply raw overrides to base schedule directly AND filter out hidden ones
+    let mergedSchedule = baseSchedule
+        .filter(item => overrides[`${item.id}-hidden`] !== 'true')
+        .map(item => ({
+            ...item,
+            timeFrom: overrides[`${item.id}-timeFrom`] || item.timeFrom,
+            timeTo: overrides[`${item.id}-timeTo`] || item.timeTo,
+            duration: overrides[`${item.id}-duration`] || item.duration,
+            event: overrides[`${item.id}-event`] || item.event,
+            host: overrides[`${item.id}-host`] || item.host,
+            remarks: overrides[`${item.id}-remarks`] || item.remarks,
+        }));
 
-    // 2. Map custom acts with overrides
-    const mappedActs = [...customActs].map(act => ({
-        ...act,
-        timeFrom: overrides[`${act.id}-timeFrom`] || act.timeFrom,
-        timeTo: overrides[`${act.id}-timeTo`] || act.timeTo,
-        duration: overrides[`${act.id}-duration`] || act.duration,
-        event: overrides[`${act.id}-event`] || act.event,
-        host: overrides[`${act.id}-host`] || act.host,
-        remarks: overrides[`${act.id}-remarks`] || act.remarks,
-    }));
+    // 2. Map custom acts with overrides AND filter out hidden ones
+    const mappedActs = [...customActs]
+        .filter(act => overrides[`${act.id}-hidden`] !== 'true')
+        .map(act => ({
+            ...act,
+            timeFrom: overrides[`${act.id}-timeFrom`] || act.timeFrom,
+            timeTo: overrides[`${act.id}-timeTo`] || act.timeTo,
+            duration: overrides[`${act.id}-duration`] || act.duration,
+            event: overrides[`${act.id}-event`] || act.event,
+            host: overrides[`${act.id}-host`] || act.host,
+            remarks: overrides[`${act.id}-remarks`] || act.remarks,
+        }));
 
     // 3. Combine them into a single sequence
     let finalSequence: ScheduleItem[] = [];

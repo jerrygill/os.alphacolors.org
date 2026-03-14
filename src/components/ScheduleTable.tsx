@@ -49,8 +49,8 @@ export default function ScheduleTable({ schedule }: ScheduleTableProps) {
 
                             {/* RIGHT: Content Column (Desktop: Col 4-12) */}
                             <div className="md:col-span-9 w-full">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
-                                    <h3 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white leading-tight">
+                                <div className="flex flex-col md:flex-row md:items-start justify-between gap-2 mb-2">
+                                    <h3 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white leading-tight whitespace-pre-wrap">
                                         {item.event}
                                     </h3>
 

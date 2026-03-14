@@ -34,8 +34,9 @@ export default function Home() {
 
                 // Apply Team Overrides
                 Object.keys(sheetData.team).forEach(role => {
-                    if (overrides[`team-${role}`]) {
-                        sheetData.team[role] = overrides[`team-${role}`];
+                    const overrideValue = overrides[`team-${role}`];
+                    if (overrideValue !== undefined) {
+                        sheetData.team[role] = overrideValue;
                     }
                 });
 

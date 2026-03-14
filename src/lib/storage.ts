@@ -1,8 +1,11 @@
 import { ScheduleItem } from './types';
 
-export interface OverrideData {
-    [cellId: string]: string;
+export interface OverrideMap {
+    [key: string]: string | undefined;
 }
+
+// Alias for backwards compatibility with earlier code
+export type OverrideData = OverrideMap;
 
 export interface CustomAct extends ScheduleItem {
     isNew: true;
