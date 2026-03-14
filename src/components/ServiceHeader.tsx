@@ -41,15 +41,25 @@ export default function ServiceHeader({ data }: ServiceHeaderProps) {
             {/* Hero Info Cards - No outer container */}
             <div className="space-y-4 md:space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                    {/* Title Card (Spans 2 cols on desktop) */}
-                    <div className="md:col-span-2 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 p-6 md:p-8 rounded-3xl flex flex-col justify-center items-start shadow-sm min-h-[120px] md:min-h-[160px]">
+                    {/* Title Card (Spans 2 cols on desktop unless notes exist) */}
+                    <div className={`${data.notes ? 'md:col-span-1' : 'md:col-span-2'} bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 p-6 md:p-8 rounded-3xl flex flex-col justify-center items-start shadow-sm min-h-[120px] md:min-h-[160px] transition-all`}>
                         <span className="inline-block px-3 py-1 mb-2 text-[10px] font-bold tracking-widest text-blue-600 uppercase bg-blue-50 dark:bg-blue-900/30 rounded-full">
                             Order of Service
                         </span>
-                        <h1 className="text-3xl md:text-5xl lg:text-6xl font-black tracking-tighter text-gray-900 dark:text-white leading-none font-sans">
+                        <h1 className="text-3xl md:text-5xl lg:text-5xl xl:text-6xl font-black tracking-tighter text-gray-900 dark:text-white leading-none font-sans">
                             {data.date}
                         </h1>
                     </div>
+
+                    {/* Notes Card */}
+                    {data.notes && (
+                        <div className="md:col-span-1 border-2 border-amber-500/50 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-900/10 p-6 md:p-8 rounded-3xl flex flex-col justify-center items-start shadow-sm min-h-[120px] md:min-h-[160px]">
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-widest mb-2">Service Note</span>
+                            <div className="text-sm md:text-base font-medium text-amber-900 dark:text-amber-100 whitespace-pre-wrap leading-tight">
+                                {data.notes}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Host Card */}
                     <div className="bg-black dark:bg-zinc-800 text-white p-6 md:p-8 rounded-3xl flex flex-col justify-center items-start shadow-xl min-h-[120px] md:min-h-[160px]">

@@ -30,6 +30,7 @@ export default function Home() {
                 if (overrides['host']) sheetData.host = overrides['host'];
                 if (overrides['date']) sheetData.date = overrides['date'];
                 if (overrides['title']) sheetData.title = overrides['title'];
+                if (overrides['serviceNotes']) sheetData.notes = overrides['serviceNotes'];
 
                 // Apply Team Overrides
                 Object.keys(sheetData.team).forEach(role => {

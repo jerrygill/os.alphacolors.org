@@ -225,6 +225,18 @@ export default function AdminPage() {
                             ))}
                         </div>
                     </div>
+
+                    <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
+                        <label className="text-xs font-medium text-gray-500 mb-2 block">Service Notes (Important alerts for the team)</label>
+                        <div className="text-sm bg-gray-50 dark:bg-black/20 p-2 rounded-xl">
+                            <EditableCell
+                                initialValue={getVal('serviceNotes', '')}
+                                onSave={(v) => handleCellSave('serviceNotes', v)}
+                                isOverridden={!!overrides['serviceNotes']}
+                                multiline={true}
+                            />
+                        </div>
+                    </div>
                 </div>
 
                 {/* Schedule Section */}

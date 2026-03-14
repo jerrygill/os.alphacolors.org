@@ -4,6 +4,7 @@ export interface ServiceData {
     host: string;
     team: Record<string, string>;
     schedule: ScheduleItem[];
+    notes?: string;
     raw?: any[][]; // For admin purposes
 }
 
