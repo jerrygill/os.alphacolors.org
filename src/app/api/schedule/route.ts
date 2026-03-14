@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Redis from 'ioredis';
+import { sql } from '@vercel/postgres';
 import { OverrideData, CustomAct } from '@/lib/storage';
 
 export interface WeekData {
@@ -14,23 +14,6 @@ const DEFAULT_DATA: WeekData = {
     rowOrder: null,
 };
 
-// Use a lazy singleton to avoid module-level initialization issues with Next.js runtime
-let _redis: Redis | null = null;
-function getRedis(): Redis | null {
-    if (!process.env.REDIS_URL) return null;
-    if (!_redis) {
-        _redis = new Redis(process.env.REDIS_URL, {
-            maxRetriesPerRequest: 3,
-            connectTimeout: 5000,
-            lazyConnect: false,
-        });
-        _redis.on('error', (err) => {
-            console.error('Redis connection error:', err);
-        });
-    }
-    return _redis;
-}
-
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const weekKey = searchParams.get('weekKey');
@@ -39,25 +22,28 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'weekKey is required' }, { status: 400 });
     }
 
-    const redis = getRedis();
-    if (!redis) {
-        console.warn('GET /api/schedule: REDIS_URL not configured, returning default data.');
-        return NextResponse.json(DEFAULT_DATA);
-    }
-
     try {
-        const key = `os-week-${weekKey}`;
-        const raw = await redis.get(key);
-        const data = raw ? JSON.parse(raw) as WeekData : DEFAULT_DATA;
+        // Fetch the JSON payload for this specific week from Postgres
+        const { rows } = await sql`
+            SELECT data FROM os_schedule_data 
+            WHERE week_key = ${weekKey} 
+            LIMIT 1;
+        `;
+
+        const data = rows.length > 0 ? (rows[0].data as WeekData) : DEFAULT_DATA;
 
         return NextResponse.json(data, {
             headers: {
                 'Cache-Control': 'no-store, max-age=0',
             }
         });
-    } catch (error) {
-        console.error('Redis GET error:', error);
-        return NextResponse.json(DEFAULT_DATA);
+    } catch (error: any) {
+        // If the table doesn't exist yet, it will throw an error. We want to just return default data gracefully.
+        if (error.message && error.message.includes('does not exist')) {
+            return NextResponse.json(DEFAULT_DATA, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
+        }
+        console.error('Postgres GET error:', error);
+        return NextResponse.json(DEFAULT_DATA, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
     }
 }
 
@@ -69,31 +55,42 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'weekKey is required' }, { status: 400 });
     }
 
-    const redis = getRedis();
-    if (!redis) {
-        console.warn('POST /api/schedule: REDIS_URL not configured, cannot save.');
-        return NextResponse.json({ success: false, message: 'Redis not configured' }, { status: 503 });
-    }
-
     try {
+        // 1. Ensure the table exists on every POST (runs very fast if it already does)
+        await sql`
+            CREATE TABLE IF NOT EXISTS os_schedule_data (
+                week_key VARCHAR(50) PRIMARY KEY,
+                data JSONB NOT NULL,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `;
+
         const body = await req.json() as Partial<WeekData>;
-        const key = `os-week-${weekKey}`;
+        
+        // 2. Fetch existing data first to merge 
+        const { rows } = await sql`SELECT data FROM os_schedule_data WHERE week_key = ${weekKey} LIMIT 1;`;
+        const existing: WeekData = rows.length > 0 ? (rows[0].data as WeekData) : DEFAULT_DATA;
 
-        // Fetch existing data first to merge (so individual saves don't overwrite each other)
-        const raw = await redis.get(key);
-        const existing: WeekData = raw ? JSON.parse(raw) : DEFAULT_DATA;
-
+        // 3. Merge data cleanly
         const merged: WeekData = {
             overrides: body.overrides ?? existing.overrides,
             customActs: body.customActs ?? existing.customActs,
             rowOrder: body.rowOrder !== undefined ? body.rowOrder : existing.rowOrder,
         };
 
-        await redis.set(key, JSON.stringify(merged));
+        // 4. Upsert (Insert or Update) into Postgres
+        await sql`
+            INSERT INTO os_schedule_data (week_key, data, updated_at)
+            VALUES (${weekKey}, ${JSON.stringify(merged)}, CURRENT_TIMESTAMP)
+            ON CONFLICT (week_key) 
+            DO UPDATE SET 
+                data = EXCLUDED.data,
+                updated_at = EXCLUDED.updated_at;
+        `;
 
         return NextResponse.json({ success: true, data: merged });
     } catch (error) {
-        console.error('Redis POST error:', error);
+        console.error('Postgres POST error:', error);
         return NextResponse.json({ error: 'Failed to save data' }, { status: 500 });
     }
 }
