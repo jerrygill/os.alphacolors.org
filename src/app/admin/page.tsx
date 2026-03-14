@@ -115,35 +115,60 @@ export default function AdminPage() {
             insertAfterId
         };
         const newActs = [...customActs, newAct];
-        setCustomActs(newActs); // Optimistic UI update
+        
+        // If rowOrder is null, initialize it with the current computed visual order so insertions work accurately
+        let newRowOrder = rowOrder ? [...rowOrder] : computedSchedule.map(i => i.id);
+        
+        if (insertAfterId) {
+            const insertIdx = newRowOrder.indexOf(insertAfterId);
+            if (insertIdx > -1) {
+                newRowOrder.splice(insertIdx + 1, 0, newAct.id);
+            } else {
+                newRowOrder.push(newAct.id);
+            }
+        } else {
+            newRowOrder.push(newAct.id);
+        }
+
+        setCustomActs(newActs);
+        setRowOrder(newRowOrder);
         setInsertingAfterId(null);
         setDuplicatingItemData(null);
-        await saveWeekData(currentWeekKey, { customActs: newActs });
+        await saveWeekData(currentWeekKey, { customActs: newActs, rowOrder: newRowOrder });
     };
 
     const handleDeleteAct = async (id: string) => {
         if (!confirm('Are you sure you want to delete this custom item?')) return;
         const newActs = customActs.filter(a => a.id !== id);
+        const newRowOrder = (rowOrder || computedSchedule.map(i => i.id)).filter(rId => rId !== id);
+        
         setCustomActs(newActs);
-        await saveWeekData(currentWeekKey, { overrides, customActs: newActs, rowOrder });
+        setRowOrder(newRowOrder);
+        await saveWeekData(currentWeekKey, { overrides, customActs: newActs, rowOrder: newRowOrder });
     };
 
-    const handleDeleteRow = async (item: any) => { // Using 'any' for ScheduleItem as it's not imported here
+    const handleDeleteRow = async (item: any) => {
         if (!confirm(`Are you sure you want to remove "${item.event}" from this week's schedule?`)) return;
         
+        const currentOrder = rowOrder || computedSchedule.map(i => i.id);
+
         if (item.isCustom) {
-            // Completely delete custom acts
             const newActs = customActs.filter(a => a.id !== item.id);
+            const newRowOrder = currentOrder.filter(rId => rId !== item.id);
+            
             setCustomActs(newActs);
-            await saveWeekData(currentWeekKey, { overrides, customActs: newActs, rowOrder });
+            setRowOrder(newRowOrder);
+            await saveWeekData(currentWeekKey, { overrides, customActs: newActs, rowOrder: newRowOrder });
         } else {
-            // Hide base rows by adding a 'hidden: true' override
             const newOverrides = {
                 ...overrides,
                 [`${item.id}-hidden`]: 'true'
             };
+            const newRowOrder = currentOrder.filter(rId => rId !== item.id);
+            
             setOverrides(newOverrides);
-            await saveWeekData(currentWeekKey, { overrides: newOverrides, customActs, rowOrder });
+            setRowOrder(newRowOrder);
+            await saveWeekData(currentWeekKey, { overrides: newOverrides, customActs, rowOrder: newRowOrder });
         }
     };
 
