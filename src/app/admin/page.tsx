@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { fetchSheetData } from '@/lib/sheets';
 import { getSheetGid, getWeekKey } from '@/lib/date-utils';
 import { getOverrides, getCustomActs, saveOverride, addCustomAct, removeCustomAct, clearOverrides, OverrideData, CustomAct } from '@/lib/storage';
 import { ServiceData } from '@/lib/types';
+import { recalculateSchedule } from '@/lib/schedule-utils';
+import { getMinutesDifference } from '@/lib/time-utils';
 import EditableCell from '@/components/EditableCell';
 import AddPerformance from '@/components/AddPerformance';
 import Link from 'next/link';
@@ -13,6 +15,8 @@ export default function AdminPage() {
     const [data, setData] = useState<ServiceData | null>(null);
     const [loading, setLoading] = useState(true);
     const [overrides, setOverrides] = useState<OverrideData>({});
+    const [customActs, setCustomActs] = useState<CustomAct[]>([]);
+    const [insertingAfterId, setInsertingAfterId] = useState<string | null>(null);
 
     // We need to keep track of date to ensure we are editing same week
     const [currentWeekKey, setCurrentWeekKey] = useState<string>('');
@@ -32,11 +36,8 @@ export default function AdminPage() {
             setOverrides(savedOverrides);
 
             // Load custom acts
-            const customActs = getCustomActs(weekKey);
-
-            // Merge custom acts into schedule for display
-            // Note: In admin, we append them at the end with a delete button
-            sheetData.schedule = [...sheetData.schedule, ...customActs];
+            const loadedCustomActs = getCustomActs(weekKey);
+            setCustomActs(loadedCustomActs);
 
             setData(sheetData);
         } catch (error) {
@@ -50,22 +51,54 @@ export default function AdminPage() {
         loadData();
     }, []);
 
+    const computedSchedule = data ? recalculateSchedule(data.schedule, overrides, customActs) : [];
+
     const handleCellSave = (id: string, value: string) => {
-        saveOverride(currentWeekKey, id, value);
-        // Update local state to reflect change immediately
-        setOverrides(prev => ({ ...prev, [id]: value }));
-        // Also update data object so it shows in UI without refresh
-        // (Simplified: for deep updates we rely on overrides map in render)
+        let finalId = id;
+        let finalValue = value;
+
+        // Smart Time Handling
+        // If the user edits a formatted time string, we convert that edit into a duration override.
+        if (id.endsWith('-timeTo') || id.endsWith('-timeFrom')) {
+            const isFrom = id.endsWith('-timeFrom');
+            const rowId = id.replace(isFrom ? '-timeFrom' : '-timeTo', '');
+            const itemIndex = computedSchedule.findIndex(item => item.id === rowId);
+
+            if (itemIndex > -1) {
+                if (isFrom && itemIndex > 0) {
+                    // Changing start time of an item (not the first one) means changing the duration of the PREVIOUS item
+                    const prevItem = computedSchedule[itemIndex - 1];
+                    const diff = getMinutesDifference(prevItem.timeFrom, value);
+                    if (diff !== null && diff >= 0) {
+                        finalId = `${prevItem.id}-duration`;
+                        finalValue = diff.toString();
+                    }
+                } else if (!isFrom) {
+                    // Changing end time means changing the duration of THIS item
+                    const currItem = computedSchedule[itemIndex];
+                    const diff = getMinutesDifference(currItem.timeFrom, value);
+                    if (diff !== null && diff >= 0) {
+                        finalId = `${rowId}-duration`;
+                        finalValue = diff.toString();
+                    }
+                }
+            }
+        }
+
+        saveOverride(currentWeekKey, finalId, finalValue);
+        setOverrides(prev => ({ ...prev, [finalId]: finalValue }));
     };
 
-    const handleAddAct = (actData: Omit<CustomAct, 'id' | 'isNew'>) => {
+    const handleAddAct = (actData: Omit<CustomAct, 'id' | 'isNew' | 'insertAfterId'>, insertAfterId?: string) => {
         const newAct: CustomAct = {
             ...actData,
             id: `custom-${Date.now()}`,
-            isNew: true
+            isNew: true,
+            insertAfterId
         };
         addCustomAct(currentWeekKey, newAct);
         loadData(); // Reload to see changes
+        setInsertingAfterId(null);
     };
 
     const handleDeleteAct = (id: string) => {
@@ -195,17 +228,18 @@ export default function AdminPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                {data.schedule.map((item) => (
-                                    <tr key={item.id} className={item.isCustom ? 'bg-blue-50/30' : ''}>
+                                {computedSchedule.map((item, index) => (
+                                    <React.Fragment key={item.id}>
+                                    <tr className={item.isCustom ? 'bg-blue-50/30' : ''}>
                                         <td className="p-4 align-top">
                                             <div className="space-y-1">
                                                 <EditableCell
-                                                    initialValue={getVal(`${item.id}-timeFrom`, item.timeFrom)}
+                                                    initialValue={item.timeFrom}
                                                     onSave={(v) => handleCellSave(`${item.id}-timeFrom`, v)}
                                                     isOverridden={!!overrides[`${item.id}-timeFrom`]}
                                                 />
                                                 <EditableCell
-                                                    initialValue={getVal(`${item.id}-timeTo`, item.timeTo)}
+                                                    initialValue={item.timeTo}
                                                     onSave={(v) => handleCellSave(`${item.id}-timeTo`, v)}
                                                     isOverridden={!!overrides[`${item.id}-timeTo`]}
                                                 />
@@ -213,44 +247,59 @@ export default function AdminPage() {
                                         </td>
                                         <td className="p-4 align-top">
                                             <EditableCell
-                                                initialValue={getVal(`${item.id}-duration`, item.duration)}
+                                                initialValue={item.duration}
                                                 onSave={(v) => handleCellSave(`${item.id}-duration`, v)}
                                                 isOverridden={!!overrides[`${item.id}-duration`]}
                                             />
                                         </td>
                                         <td className="p-4 align-top font-bold">
                                             <EditableCell
-                                                initialValue={getVal(`${item.id}-event`, item.event)}
+                                                initialValue={item.event}
                                                 onSave={(v) => handleCellSave(`${item.id}-event`, v)}
                                                 isOverridden={!!overrides[`${item.id}-event`]}
                                             />
                                         </td>
                                         <td className="p-4 align-top">
                                             <EditableCell
-                                                initialValue={getVal(`${item.id}-host`, item.host)}
+                                                initialValue={item.host}
                                                 onSave={(v) => handleCellSave(`${item.id}-host`, v)}
                                                 isOverridden={!!overrides[`${item.id}-host`]}
                                             />
                                         </td>
                                         <td className="p-4 align-top text-sm">
                                             <EditableCell
-                                                initialValue={getVal(`${item.id}-remarks`, item.remarks)}
+                                                initialValue={item.remarks}
                                                 onSave={(v) => handleCellSave(`${item.id}-remarks`, v)}
                                                 isOverridden={!!overrides[`${item.id}-remarks`]}
                                             />
                                         </td>
-                                        <td className="p-4 align-top text-center">
+                                        <td className="p-4 align-top text-center space-y-2">
                                             {item.isCustom && (
                                                 <button
                                                     onClick={() => handleDeleteAct(item.id)}
-                                                    className="text-red-500 hover:text-red-700 p-1"
+                                                    className="block w-full text-red-500 hover:text-red-700 p-1 bg-white dark:bg-zinc-800 rounded shadow-sm border border-red-100 dark:border-red-900/30"
                                                     title="Delete custom item"
                                                 >
                                                     🗑️
                                                 </button>
                                             )}
+                                            <button
+                                                onClick={() => setInsertingAfterId(insertingAfterId === item.id ? null : item.id)}
+                                                className="block w-full text-blue-500 hover:text-blue-700 p-1 bg-white dark:bg-zinc-800 rounded shadow-sm border border-blue-100 dark:border-blue-900/50"
+                                                title="Insert item after this row"
+                                            >
+                                                {insertingAfterId === item.id ? '➖' : '➕'}
+                                            </button>
                                         </td>
                                     </tr>
+                                    {insertingAfterId === item.id && (
+                                        <tr>
+                                            <td colSpan={6} className="bg-gray-50 border-y-2 border-blue-200 p-0">
+                                                <AddPerformance onAdd={(act) => handleAddAct(act, item.id)} />
+                                            </td>
+                                        </tr>
+                                    )}
+                                    </React.Fragment>
                                 ))}
                             </tbody>
                         </table>

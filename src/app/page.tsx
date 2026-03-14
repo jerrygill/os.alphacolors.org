@@ -5,6 +5,7 @@ import { fetchSheetData } from '@/lib/sheets';
 import { getSheetGid, getWeekKey } from '@/lib/date-utils';
 import { getOverrides, getCustomActs, OverrideData } from '@/lib/storage';
 import { ServiceData, ScheduleItem } from '@/lib/types';
+import { recalculateSchedule } from '@/lib/schedule-utils';
 import ServiceHeader from '@/components/ServiceHeader';
 import ScheduleTable from '@/components/ScheduleTable';
 
@@ -37,31 +38,8 @@ export default function Home() {
                     }
                 });
 
-                // Apply Schedule Overrides and Merge Custom Acts
-                // We need to map schedule items to handle overrides by ID (row index)
-                const mergedSchedule = sheetData.schedule.map(item => {
-                    const id = item.id;
-                    return {
-                        ...item,
-                        timeFrom: overrides[`${id}-timeFrom`] || item.timeFrom,
-                        timeTo: overrides[`${id}-timeTo`] || item.timeTo,
-                        duration: overrides[`${id}-duration`] || item.duration,
-                        event: overrides[`${id}-event`] || item.event,
-                        host: overrides[`${id}-host`] || item.host,
-                        remarks: overrides[`${id}-remarks`] || item.remarks,
-                    };
-                });
-
-                // Add custom acts
-                // For simplicity, we just append them for now. 
-                // A more complex logic could insert them based on time, but simple append/inject is safer.
-                // Or we could sort by time effectively.
-                const allSchedule = [...mergedSchedule, ...customActs];
-
-                // Simple sort by time if available (optional, but good for custom acts placement)
-                // allSchedule.sort((a, b) => a.timeFrom.localeCompare(b.timeFrom));
-
-                sheetData.schedule = allSchedule;
+                // Apply Schedule Overrides and Merge Custom Acts dynamically
+                sheetData.schedule = recalculateSchedule(sheetData.schedule, overrides, customActs);
 
                 setData(sheetData);
             } catch (error) {

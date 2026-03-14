@@ -50,43 +50,21 @@ export default function AddPerformance({ onAdd }: AddPerformanceProps) {
         <div className="mt-4 bg-gray-50 dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700">
             <h3 className="text-lg font-bold mb-4">Add Custom Performance</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                     <div className="col-span-1">
-                        <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Duration (Minutes)</label>
                         <input
                             required
-                            name="timeFrom"
-                            type="text"
-                            placeholder="9:30 AM"
-                            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-black focus:ring-2 focus:ring-blue-500"
-                            value={formData.timeFrom}
-                            onChange={handleChange}
-                        />
-                    </div>
-                    <div className="col-span-1">
-                        <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
-                        <input
-                            required
-                            name="timeTo"
-                            type="text"
-                            placeholder="9:40 AM"
-                            className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-black focus:ring-2 focus:ring-blue-500"
-                            value={formData.timeTo}
-                            onChange={handleChange}
-                        />
-                    </div>
-                    <div className="col-span-1">
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Minutes</label>
-                        <input
                             name="duration"
                             type="number"
+                            min="0"
                             placeholder="10"
                             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-black focus:ring-2 focus:ring-blue-500"
                             value={formData.duration}
                             onChange={handleChange}
                         />
                     </div>
-                    <div className="col-span-2 lg:col-span-3">
+                    <div className="col-span-1 lg:col-span-3">
                         <label className="block text-xs font-medium text-gray-500 mb-1">Event Name</label>
                         <input
                             required

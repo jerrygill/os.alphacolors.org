@@ -17,6 +17,7 @@ export interface OverrideData {
 
 export interface CustomAct extends ScheduleItem {
     isNew: true;
+    insertAfterId?: string; // ID of the row this act should appear after. If undefined, append to end.
 }
 
 export const getStorageKey = (weekKey: string) => `${STORAGE_KEY_PREFIX}${weekKey}`;
