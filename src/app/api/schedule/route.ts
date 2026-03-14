@@ -16,13 +16,28 @@ const DEFAULT_DATA: WeekData = {
 
 // Resolve the connection string from any possible Vercel env var prefix
 function getConnectionString(): string | undefined {
-    return (
+    // Try all known Vercel/Neon env var names
+    const directUrl =
         process.env.POSTGRES_URL ||
         process.env.DATABASE_URL ||
         process.env.STORAGE_URL ||
+        process.env.NEON_DATABASE_URL ||
         process.env.POSTGRES_URL_NON_POOLING ||
-        process.env.DATABASE_URL_UNPOOLED
-    );
+        process.env.POSTGRES_URL_NO_SSL ||
+        process.env.DATABASE_URL_UNPOOLED;
+
+    if (directUrl) return directUrl;
+
+    // Fallback: assemble from individual PG* vars
+    const host = process.env.PGHOST;
+    const user = process.env.PGUSER;
+    const password = process.env.PGPASSWORD;
+    const database = process.env.PGDATABASE;
+    if (host && user && password && database) {
+        return `postgresql://${user}:${password}@${host}/${database}?sslmode=require`;
+    }
+
+    return undefined;
 }
 
 // Lazy singleton pool
@@ -81,8 +96,17 @@ export async function POST(req: NextRequest) {
 
     const pool = getPool();
     if (!pool) {
-        console.warn('No database connection string found in environment');
-        return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
+        const debugVars = {
+            POSTGRES_URL: !!process.env.POSTGRES_URL,
+            DATABASE_URL: !!process.env.DATABASE_URL,
+            STORAGE_URL: !!process.env.STORAGE_URL,
+            PGHOST: !!process.env.PGHOST,
+            PGUSER: !!process.env.PGUSER,
+            PGPASSWORD: !!process.env.PGPASSWORD,
+            PGDATABASE: !!process.env.PGDATABASE,
+        };
+        console.error('POST: No DB connection string found. Env var check:', JSON.stringify(debugVars));
+        return NextResponse.json({ error: 'Database not configured', debug: debugVars }, { status: 503 });
     }
 
     try {
