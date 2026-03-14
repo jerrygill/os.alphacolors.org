@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { fetchSheetData } from '@/lib/sheets';
 import { getSheetGid, getWeekKey } from '@/lib/date-utils';
-import { getOverrides, getCustomActs, saveOverride, addCustomAct, removeCustomAct, clearOverrides, OverrideData, CustomAct } from '@/lib/storage';
+import { getWeekData, saveWeekData, clearWeekData, OverrideData, CustomAct, WeekData } from '@/lib/storage';
 import { ServiceData } from '@/lib/types';
 import { recalculateSchedule } from '@/lib/schedule-utils';
 import { getMinutesDifference } from '@/lib/time-utils';
@@ -16,7 +16,9 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(true);
     const [overrides, setOverrides] = useState<OverrideData>({});
     const [customActs, setCustomActs] = useState<CustomAct[]>([]);
+    const [rowOrder, setRowOrder] = useState<string[] | null>(null);
     const [insertingAfterId, setInsertingAfterId] = useState<string | null>(null);
+    const [duplicatingItemData, setDuplicatingItemData] = useState<Partial<CustomAct> | null>(null);
 
     // We need to keep track of date to ensure we are editing same week
     const [currentWeekKey, setCurrentWeekKey] = useState<string>('');
@@ -31,13 +33,12 @@ export default function AdminPage() {
         try {
             const sheetData = await fetchSheetData(gid);
 
-            // Load local state
-            const savedOverrides = getOverrides(weekKey);
-            setOverrides(savedOverrides);
-
-            // Load custom acts
-            const loadedCustomActs = getCustomActs(weekKey);
-            setCustomActs(loadedCustomActs);
+            // Fetch Cloud Sync Data
+            const weekData: WeekData = await getWeekData(weekKey);
+            
+            setOverrides(weekData.overrides);
+            setCustomActs(weekData.customActs);
+            setRowOrder(weekData.rowOrder);
 
             setData(sheetData);
         } catch (error) {
@@ -51,14 +52,32 @@ export default function AdminPage() {
         loadData();
     }, []);
 
-    const computedSchedule = data ? recalculateSchedule(data.schedule, overrides, customActs) : [];
+    const computedSchedule = data ? recalculateSchedule(data.schedule, overrides, customActs, rowOrder) : [];
 
-    const handleCellSave = (id: string, value: string) => {
+    const handleMove = async (index: number, direction: -1 | 1) => {
+        if (index + direction < 0 || index + direction >= computedSchedule.length) return;
+
+        // Create current implicit order if rowOrder is null
+        const currentOrder = rowOrder || computedSchedule.map(item => item.id);
+        
+        // Ensure the currentOrder actually reflects the computedSchedule in case of orphans
+        // But for swapping, it's safer to just swap the IDs in a newly derived array based exactly on computedSchedule
+        const newOrder = computedSchedule.map(item => item.id);
+        
+        // Swap
+        const temp = newOrder[index];
+        newOrder[index] = newOrder[index + direction];
+        newOrder[index + direction] = temp;
+
+        setRowOrder(newOrder); // Optimistic
+        await saveWeekData(currentWeekKey, { rowOrder: newOrder });
+    };
+
+    const handleCellSave = async (id: string, value: string) => {
         let finalId = id;
         let finalValue = value;
 
         // Smart Time Handling
-        // If the user edits a formatted time string, we convert that edit into a duration override.
         if (id.endsWith('-timeTo') || id.endsWith('-timeFrom')) {
             const isFrom = id.endsWith('-timeFrom');
             const rowId = id.replace(isFrom ? '-timeFrom' : '-timeTo', '');
@@ -66,7 +85,6 @@ export default function AdminPage() {
 
             if (itemIndex > -1) {
                 if (isFrom && itemIndex > 0) {
-                    // Changing start time of an item (not the first one) means changing the duration of the PREVIOUS item
                     const prevItem = computedSchedule[itemIndex - 1];
                     const diff = getMinutesDifference(prevItem.timeFrom, value);
                     if (diff !== null && diff >= 0) {
@@ -74,7 +92,6 @@ export default function AdminPage() {
                         finalValue = diff.toString();
                     }
                 } else if (!isFrom) {
-                    // Changing end time means changing the duration of THIS item
                     const currItem = computedSchedule[itemIndex];
                     const diff = getMinutesDifference(currItem.timeFrom, value);
                     if (diff !== null && diff >= 0) {
@@ -85,35 +102,36 @@ export default function AdminPage() {
             }
         }
 
-        saveOverride(currentWeekKey, finalId, finalValue);
-        setOverrides(prev => ({ ...prev, [finalId]: finalValue }));
+        const newOverrides = { ...overrides, [finalId]: finalValue };
+        setOverrides(newOverrides); // Optimistic UI update
+        await saveWeekData(currentWeekKey, { overrides: newOverrides });
     };
 
-    const handleAddAct = (actData: Omit<CustomAct, 'id' | 'isNew' | 'insertAfterId'>, insertAfterId?: string) => {
+    const handleAddAct = async (actData: Omit<CustomAct, 'id' | 'isNew' | 'insertAfterId'>, insertAfterId?: string) => {
         const newAct: CustomAct = {
             ...actData,
             id: `custom-${Date.now()}`,
             isNew: true,
             insertAfterId
         };
-        addCustomAct(currentWeekKey, newAct);
-        loadData(); // Reload to see changes
+        const newActs = [...customActs, newAct];
+        setCustomActs(newActs); // Optimistic UI update
         setInsertingAfterId(null);
+        setDuplicatingItemData(null);
+        await saveWeekData(currentWeekKey, { customActs: newActs });
     };
 
-    const handleDeleteAct = (id: string) => {
+    const handleDeleteAct = async (id: string) => {
         if (confirm('Are you sure you want to delete this added item?')) {
-            removeCustomAct(currentWeekKey, id);
-            loadData();
+            const newActs = customActs.filter(a => a.id !== id);
+            setCustomActs(newActs); // Optimistic UI
+            await saveWeekData(currentWeekKey, { customActs: newActs });
         }
     };
 
-    const handleReset = () => {
+    const handleReset = async () => {
         if (confirm('This will clear ALL local edits for this week. Are you sure?')) {
-            clearOverrides(currentWeekKey);
-            // Also we should technically clear custom acts if we want a full reset, 
-            // but function only clears overrides. Let's stick to overrides for now or manually clean acts.
-            // For now, let's just reload.
+            await clearWeekData(currentWeekKey);
             window.location.reload();
         }
     };
@@ -274,6 +292,24 @@ export default function AdminPage() {
                                             />
                                         </td>
                                         <td className="p-4 align-top text-center space-y-2">
+                                            <div className="flex gap-1 justify-center mb-1">
+                                                <button
+                                                    onClick={() => handleMove(index, -1)}
+                                                    disabled={index === 0}
+                                                    className="w-1/2 text-gray-400 hover:text-gray-700 disabled:opacity-30 p-1 bg-white dark:bg-zinc-800 rounded shadow-sm border border-gray-100 dark:border-gray-800"
+                                                    title="Move up"
+                                                >
+                                                    ⬆️
+                                                </button>
+                                                <button
+                                                    onClick={() => handleMove(index, 1)}
+                                                    disabled={index === computedSchedule.length - 1}
+                                                    className="w-1/2 text-gray-400 hover:text-gray-700 disabled:opacity-30 p-1 bg-white dark:bg-zinc-800 rounded shadow-sm border border-gray-100 dark:border-gray-800"
+                                                    title="Move down"
+                                                >
+                                                    ⬇️
+                                                </button>
+                                            </div>
                                             {item.isCustom && (
                                                 <button
                                                     onClick={() => handleDeleteAct(item.id)}
@@ -284,18 +320,48 @@ export default function AdminPage() {
                                                 </button>
                                             )}
                                             <button
-                                                onClick={() => setInsertingAfterId(insertingAfterId === item.id ? null : item.id)}
-                                                className="block w-full text-blue-500 hover:text-blue-700 p-1 bg-white dark:bg-zinc-800 rounded shadow-sm border border-blue-100 dark:border-blue-900/50"
-                                                title="Insert item after this row"
+                                                onClick={() => {
+                                                    if (insertingAfterId === item.id && duplicatingItemData) {
+                                                        // If currently duplicating this item, close it
+                                                        setInsertingAfterId(null);
+                                                        setDuplicatingItemData(null);
+                                                    } else {
+                                                        setInsertingAfterId(item.id);
+                                                        setDuplicatingItemData({
+                                                            event: item.event,
+                                                            host: item.host,
+                                                            remarks: item.remarks,
+                                                        });
+                                                    }
+                                                }}
+                                                className="block w-full text-purple-500 hover:text-purple-700 p-1 bg-white dark:bg-zinc-800 rounded shadow-sm border border-purple-100 dark:border-purple-900/50"
+                                                title="Duplicate this row"
                                             >
-                                                {insertingAfterId === item.id ? '➖' : '➕'}
+                                                📋
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    if (insertingAfterId === item.id && !duplicatingItemData) {
+                                                        setInsertingAfterId(null);
+                                                    } else {
+                                                        setInsertingAfterId(item.id);
+                                                        setDuplicatingItemData(null);
+                                                    }
+                                                }}
+                                                className="block w-full text-blue-500 hover:text-blue-700 p-1 bg-white dark:bg-zinc-800 rounded shadow-sm border border-blue-100 dark:border-blue-900/50"
+                                                title="Insert empty item after this row"
+                                            >
+                                                {insertingAfterId === item.id && !duplicatingItemData ? '➖' : '➕'}
                                             </button>
                                         </td>
                                     </tr>
                                     {insertingAfterId === item.id && (
                                         <tr>
-                                            <td colSpan={6} className="bg-gray-50 border-y-2 border-blue-200 p-0">
-                                                <AddPerformance onAdd={(act) => handleAddAct(act, item.id)} />
+                                            <td colSpan={6} className={`bg-gray-50 border-y-2 p-0 ${duplicatingItemData ? 'border-purple-200' : 'border-blue-200'}`}>
+                                                <AddPerformance 
+                                                    onAdd={(act) => handleAddAct(act, item.id)} 
+                                                    initialData={duplicatingItemData || undefined}
+                                                />
                                             </td>
                                         </tr>
                                     )}

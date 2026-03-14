@@ -1,67 +1,56 @@
 import { ScheduleItem } from './types';
 
-const safeJsonParse = (val: string | null, fallback: any) => {
-    if (!val) return fallback;
-    try {
-        return JSON.parse(val);
-    } catch {
-        return fallback;
-    }
-};
-
-const STORAGE_KEY_PREFIX = 'os-overrides-';
-
 export interface OverrideData {
-    [cellId: string]: string; // cellId can be `row-X-col-Y` or specific keys like `host`
+    [cellId: string]: string;
 }
 
 export interface CustomAct extends ScheduleItem {
     isNew: true;
-    insertAfterId?: string; // ID of the row this act should appear after. If undefined, append to end.
+    insertAfterId?: string;
 }
 
-export const getStorageKey = (weekKey: string) => `${STORAGE_KEY_PREFIX}${weekKey}`;
+export interface WeekData {
+    overrides: OverrideData;
+    customActs: CustomAct[];
+    rowOrder: string[] | null;
+}
 
-export function saveOverride(weekKey: string, id: string, value: string) {
+const DEFAULT_DATA: WeekData = {
+    overrides: {},
+    customActs: [],
+    rowOrder: null,
+};
+
+// Fetch all data for a week
+export async function getWeekData(weekKey: string): Promise<WeekData> {
+    if (typeof window === 'undefined') return DEFAULT_DATA;
+    try {
+        const res = await fetch(`/api/schedule?weekKey=${weekKey}`, {
+            next: { revalidate: 0 } // Always get fresh data on client
+        });
+        if (!res.ok) return DEFAULT_DATA;
+        return await res.json();
+    } catch (e) {
+        console.error('Failed to fetch cloud data', e);
+        return DEFAULT_DATA;
+    }
+}
+
+// Push an exact payload to the cloud
+export async function saveWeekData(weekKey: string, data: Partial<WeekData>): Promise<void> {
     if (typeof window === 'undefined') return;
-
-    const key = getStorageKey(weekKey);
-    const current = safeJsonParse(localStorage.getItem(key), {});
-    current[id] = value;
-    localStorage.setItem(key, JSON.stringify(current));
+    try {
+        await fetch(`/api/schedule?weekKey=${weekKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+    } catch (e) {
+        console.error('Failed to save to cloud', e);
+    }
 }
 
-export function getOverrides(weekKey: string): OverrideData {
-    if (typeof window === 'undefined') return {};
-    const key = getStorageKey(weekKey);
-    return safeJsonParse(localStorage.getItem(key), {});
-}
-
-export function clearOverrides(weekKey: string) {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(getStorageKey(weekKey));
-}
-
-// Custom Acts Management
-const ACTS_KEY_PREFIX = 'os-custom-acts-';
-
-export function addCustomAct(weekKey: string, act: CustomAct) {
-    if (typeof window === 'undefined') return;
-    const key = `${ACTS_KEY_PREFIX}${weekKey}`;
-    const acts = getCustomActs(weekKey);
-    acts.push(act);
-    localStorage.setItem(key, JSON.stringify(acts));
-}
-
-export function getCustomActs(weekKey: string): CustomAct[] {
-    if (typeof window === 'undefined') return [];
-    const key = `${ACTS_KEY_PREFIX}${weekKey}`;
-    return safeJsonParse(localStorage.getItem(key), []);
-}
-
-export function removeCustomAct(weekKey: string, actId: string) {
-    if (typeof window === 'undefined') return;
-    const key = `${ACTS_KEY_PREFIX}${weekKey}`;
-    const acts = getCustomActs(weekKey).filter(a => a.id !== actId);
-    localStorage.setItem(key, JSON.stringify(acts));
+// Clear all data for a week (Reset)
+export async function clearWeekData(weekKey: string): Promise<void> {
+    await saveWeekData(weekKey, { overrides: {}, customActs: [], rowOrder: null });
 }

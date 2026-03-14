@@ -1,15 +1,12 @@
-import { ScheduleItem } from '@/lib/types';
-import { CustomAct, OverrideData } from '@/lib/storage';
-import { addMinutesToTime } from '@/lib/time-utils';
+import { ScheduleItem } from './types';
+import { OverrideData, CustomAct } from './storage';
+import { addMinutesToTime } from './time-utils';
 
-/**
- * Merges the base schedule with overrides and custom acts,
- * and dynamically calculates all times based on durations.
- */
 export function recalculateSchedule(
     baseSchedule: ScheduleItem[],
     overrides: OverrideData,
-    customActs: CustomAct[]
+    customActs: CustomAct[],
+    rowOrder: string[] | null = null
 ): ScheduleItem[] {
     if (!baseSchedule || baseSchedule.length === 0) return [...customActs];
 
@@ -24,13 +21,8 @@ export function recalculateSchedule(
         remarks: overrides[`${item.id}-remarks`] || item.remarks,
     }));
 
-    // 2. Insert Custom Acts at their specified positions
-    // We do this by finding the index of the insertAfterId.
-    // Acts without an insertAfterId or where the ID isn't found go to the end.
-    const finalSequence: ScheduleItem[] = [];
-    
-    // Create a pool of custom acts that need placing
-    const pendingActs = [...customActs].map(act => ({
+    // 2. Map custom acts with overrides
+    const mappedActs = [...customActs].map(act => ({
         ...act,
         timeFrom: overrides[`${act.id}-timeFrom`] || act.timeFrom,
         timeTo: overrides[`${act.id}-timeTo`] || act.timeTo,
@@ -40,28 +32,50 @@ export function recalculateSchedule(
         remarks: overrides[`${act.id}-remarks`] || act.remarks,
     }));
 
-    mergedSchedule.forEach(baseItem => {
-        finalSequence.push(baseItem);
+    // 3. Combine them into a single sequence
+    let finalSequence: ScheduleItem[] = [];
 
-        // Find any custom acts that want to be exactly right after this item
-        // We use a while loop in case multiple custom acts want to be inserted after the same base item,
-        // although standard UI handles one at a time. This allows ordered chaining if they stack.
-        let actsToInsert = pendingActs.filter(a => a.insertAfterId === baseItem.id);
-        
-        // Remove inserted acts from pending pool
-        actsToInsert.forEach(a => {
-            const idx = pendingActs.findIndex(p => p.id === a.id);
-            if (idx > -1) pendingActs.splice(idx, 1);
+    if (rowOrder && rowOrder.length > 0) {
+        // If rowOrder exists, it dictates the master sorting purely
+        const idMap = new Map<string, ScheduleItem>();
+        mergedSchedule.forEach(i => idMap.set(i.id, i));
+        mappedActs.forEach(i => idMap.set(i.id, i));
+
+        rowOrder.forEach(id => {
+            if (idMap.has(id)) {
+                finalSequence.push(idMap.get(id)!);
+                idMap.delete(id);
+            }
         });
 
-        // Add them to the sequence
-        finalSequence.push(...actsToInsert);
-    });
+        // Add any remaining items that weren't in rowOrder (e.g. newly added acts via code updates) to the end
+        if (idMap.size > 0) {
+            finalSequence = finalSequence.concat(Array.from(idMap.values()));
+        }
 
-    // Any remaining acts (orphans or explicitly meant for the end) get appended
-    finalSequence.push(...pendingActs);
+    } else {
+        // Fallback: Default Insertion logic (if no rowOrder is saved yet)
+        const pendingActs = [...mappedActs];
+        mergedSchedule.forEach(baseItem => {
+            finalSequence.push(baseItem);
 
-    // 3. Dynamic Time Calculation (The Cascade)
+            // Find custom acts that want to be inserted after this item
+            let actsToInsert = pendingActs.filter(a => a.insertAfterId === baseItem.id);
+            
+            // Remove from pending
+            actsToInsert.forEach(a => {
+                const idx = pendingActs.findIndex(p => p.id === a.id);
+                if (idx > -1) pendingActs.splice(idx, 1);
+            });
+
+            finalSequence.push(...actsToInsert);
+        });
+
+        // Any remaining orphans
+        finalSequence.push(...pendingActs);
+    }
+
+    // 4. Dynamic Time Calculation (The Cascade)
     let currentStartTime = finalSequence[0]?.timeFrom || '12:00 AM';
 
     return finalSequence.map((item, index) => {

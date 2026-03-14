@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { fetchSheetData } from '@/lib/sheets';
 import { getSheetGid, getWeekKey } from '@/lib/date-utils';
-import { getOverrides, getCustomActs, OverrideData } from '@/lib/storage';
+import { getWeekData, WeekData } from '@/lib/storage';
 import { ServiceData, ScheduleItem } from '@/lib/types';
 import { recalculateSchedule } from '@/lib/schedule-utils';
 import ServiceHeader from '@/components/ServiceHeader';
@@ -22,9 +22,9 @@ export default function Home() {
             try {
                 const sheetData = await fetchSheetData(gid);
 
-                // Apply Local Overrides
-                const overrides: OverrideData = getOverrides(weekKey);
-                const customActs = getCustomActs(weekKey);
+                // Fetch Cloud Sync Data
+                const weekData: WeekData = await getWeekData(weekKey);
+                const { overrides, customActs } = weekData;
 
                 // Apply Host Override
                 if (overrides['host']) sheetData.host = overrides['host'];

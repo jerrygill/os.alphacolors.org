@@ -1,24 +1,40 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CustomAct } from '@/lib/storage';
 
 interface AddPerformanceProps {
     onAdd: (act: Omit<CustomAct, 'id' | 'isNew'>) => void;
+    initialData?: Partial<CustomAct>;
 }
 
-export default function AddPerformance({ onAdd }: AddPerformanceProps) {
-    const [isOpen, setIsOpen] = useState(false);
+export default function AddPerformance({ onAdd, initialData }: AddPerformanceProps) {
+    const [isOpen, setIsOpen] = useState(!!initialData);
+    
     const [formData, setFormData] = useState({
         timeFrom: '',
         timeTo: '',
-        duration: '',
-        event: '',
-        host: '',
-        remarks: ''
+        duration: initialData?.duration || '',
+        event: initialData?.event || '',
+        host: initialData?.host || '',
+        remarks: initialData?.remarks || ''
     });
+
+    useEffect(() => {
+        if (initialData) {
+            setFormData(prev => ({
+                ...prev,
+                duration: initialData.duration || '',
+                event: initialData.event || '',
+                host: initialData.host || '',
+                remarks: initialData.remarks || ''
+            }));
+            setIsOpen(true);
+        }
+    }, [initialData]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         onAdd(formData);
+        // Reset form
         setFormData({
             timeFrom: '',
             timeTo: '',
