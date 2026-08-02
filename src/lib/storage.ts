@@ -1,10 +1,9 @@
-import { ScheduleItem } from './types';
+import {ScheduleItem} from './types';
 
 export interface OverrideMap {
     [key: string]: string | undefined;
 }
 
-// Alias for backwards compatibility with earlier code
 export type OverrideData = OverrideMap;
 
 export interface CustomAct extends ScheduleItem {
@@ -12,48 +11,92 @@ export interface CustomAct extends ScheduleItem {
     insertAfterId?: string;
 }
 
-export interface WeekData {
+export interface PublishedScheduleSnapshot {
     overrides: OverrideData;
     customActs: CustomAct[];
     rowOrder: string[] | null;
+    songIds: string[];
+    announcementIds: string[];
 }
 
-const DEFAULT_DATA: WeekData = {
+export interface WeekData extends PublishedScheduleSnapshot {
+    status: 'draft' | 'published';
+    publishedAt: string | null;
+    publishedSnapshot: PublishedScheduleSnapshot | null;
+}
+
+export const DEFAULT_WEEK_DATA: WeekData = {
     overrides: {},
     customActs: [],
     rowOrder: null,
+    songIds: [],
+    announcementIds: [],
+    status: 'draft',
+    publishedAt: null,
+    publishedSnapshot: null,
 };
 
-// Fetch all data for a week
-export async function getWeekData(weekKey: string): Promise<WeekData> {
-    if (typeof window === 'undefined') return DEFAULT_DATA;
-    try {
-        const res = await fetch(`/api/schedule?weekKey=${weekKey}`, {
-            cache: 'no-store' // Always get fresh data on client
-        });
-        if (!res.ok) return DEFAULT_DATA;
-        return await res.json();
-    } catch (e) {
-        console.error('Failed to fetch cloud data', e);
-        return DEFAULT_DATA;
-    }
+export function normalizeWeekData(value: Partial<WeekData> | null | undefined): WeekData {
+    return {
+        overrides: value?.overrides || {},
+        customActs: value?.customActs || [],
+        rowOrder: value?.rowOrder ?? null,
+        songIds: value?.songIds || [],
+        announcementIds: value?.announcementIds || [],
+        status: value?.status === 'published' ? 'published' : 'draft',
+        publishedAt: value?.publishedAt || null,
+        publishedSnapshot: value?.publishedSnapshot || null,
+    };
 }
 
-// Push an exact payload to the cloud
-export async function saveWeekData(weekKey: string, data: Partial<WeekData>): Promise<void> {
-    if (typeof window === 'undefined') return;
-    try {
-        await fetch(`/api/schedule?weekKey=${weekKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-    } catch (e) {
-        console.error('Failed to save to cloud', e);
-    }
+export function getPublicWeekData(value: WeekData): WeekData {
+    if (!value.publishedSnapshot) return normalizeWeekData(DEFAULT_WEEK_DATA);
+    return {
+        ...value,
+        ...value.publishedSnapshot,
+        status: 'published',
+    };
 }
 
-// Clear all data for a week (Reset)
-export async function clearWeekData(weekKey: string): Promise<void> {
-    await saveWeekData(weekKey, { overrides: {}, customActs: [], rowOrder: null });
+export async function getWeekData(weekKey: string, admin = false): Promise<WeekData> {
+    if (typeof window === 'undefined') return DEFAULT_WEEK_DATA;
+    const mode = admin ? '&mode=admin' : '';
+    const response = await fetch(`/api/schedule?weekKey=${encodeURIComponent(weekKey)}${mode}`, {
+        cache: 'no-store',
+    });
+    if (!response.ok) throw new Error('Unable to load service data.');
+    return normalizeWeekData(await response.json());
+}
+
+export async function saveWeekData(weekKey: string, data: Partial<WeekData>): Promise<WeekData> {
+    const response = await fetch(`/api/schedule?weekKey=${encodeURIComponent(weekKey)}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({data}),
+    });
+    const result = await response.json().catch(() => ({})) as {error?: string; data?: WeekData};
+    if (!response.ok || !result.data) throw new Error(result.error || 'Unable to save service data.');
+    return normalizeWeekData(result.data);
+}
+
+export async function publishWeekData(weekKey: string): Promise<WeekData> {
+    const response = await fetch(`/api/schedule?weekKey=${encodeURIComponent(weekKey)}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'publish'}),
+    });
+    const result = await response.json().catch(() => ({})) as {error?: string; data?: WeekData};
+    if (!response.ok || !result.data) throw new Error(result.error || 'Unable to publish service.');
+    return normalizeWeekData(result.data);
+}
+
+export async function clearWeekData(weekKey: string): Promise<WeekData> {
+    const response = await fetch(`/api/schedule?weekKey=${encodeURIComponent(weekKey)}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'reset'}),
+    });
+    const result = await response.json().catch(() => ({})) as {error?: string; data?: WeekData};
+    if (!response.ok || !result.data) throw new Error(result.error || 'Unable to reset service data.');
+    return normalizeWeekData(result.data);
 }

@@ -8,7 +8,7 @@ export interface ServiceData {
     raw?: any[][]; // For admin purposes
 }
 
-export interface ScheduleItem {
+export interface ScheduleItem extends Record<string, unknown> {
     id: string; // generated ID for React keys
     timeFrom: string;
     timeTo: string;
