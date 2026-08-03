@@ -25,9 +25,7 @@ function AdminBrandPanel({isCompact = false}: {isCompact?: boolean}) {
                         <Text type="display-3" weight="bold" color="inherit">Alpha Colors</Text>
                     </div>
                     <div className={styles.adminBrandTitle}>
-                        <Text type="display-1" weight="bold" color="inherit">
-                            Service<br />OS
-                        </Text>
+                        <Text type="display-1" weight="bold" color="inherit">OS</Text>
                     </div>
                 </VStack>
             </Section>
@@ -76,7 +74,7 @@ export default function AdminLoginForm() {
                 <VStack gap={6}>
                     <VStack gap={3}>
                         <div className={styles.utilityLabel}>
-                            <Text type="label" weight="bold">Service OS</Text>
+                            <Text type="label" weight="bold">Order of service</Text>
                         </div>
                         <div className={styles.adminHeading}>
                             <Heading level={1} type="display-1">Admin access</Heading>

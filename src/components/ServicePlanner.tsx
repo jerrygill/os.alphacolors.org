@@ -560,7 +560,7 @@ export default function ServicePlanner() {
                             <Banner
                                 status="info"
                                 title="Native content is now in control"
-                                description="The Google Sheet supplies the initial service order only. Songs, announcements, weekly edits, and publishing live in Service OS."
+                                description="The Google Sheet supplies the initial service order only. Songs, announcements, weekly edits, and publishing are managed here."
                                 isDismissable
                             />
                             {success ? <Banner status="success" title={success} isDismissable onDismiss={() => setSuccess(undefined)} /> : null}
