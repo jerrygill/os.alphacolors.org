@@ -12,7 +12,7 @@ import {
     SideNavSection,
 } from '@astryxdesign/core/SideNav';
 import {VStack} from '@astryxdesign/core/Stack';
-import {CalendarDays, ExternalLink, LogOut, Megaphone, Music2, Palette} from 'lucide-react';
+import {CalendarDays, ExternalLink, LogOut, Megaphone, Music2} from 'lucide-react';
 
 export type AdminSection = 'planner' | 'songs' | 'announcements';
 
@@ -34,7 +34,6 @@ export default function AdminFrame({active, children}: AdminFrameProps) {
         <SideNav
             header={
                 <SideNavHeading
-                    icon={<Icon icon={Palette} color="accent" />}
                     heading="Alpha Colors OS"
                     headingHref="/admin"
                 />
