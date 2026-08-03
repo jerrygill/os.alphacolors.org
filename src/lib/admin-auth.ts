@@ -1,6 +1,6 @@
 import 'server-only';
 
-import {createHash, scrypt as scryptCallback, timingSafeEqual} from 'node:crypto';
+import {createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual} from 'node:crypto';
 import {promisify} from 'node:util';
 import {cookies} from 'next/headers';
 import {redirect} from 'next/navigation';
@@ -79,6 +79,32 @@ export async function authenticateAdminPassword(candidate: string): Promise<Admi
         configured: true,
         authenticated,
         sessionToken: authenticated ? getSessionToken(record) : null,
+    };
+}
+
+export async function initializeAdminPassword(candidate: string): Promise<AdminAuthenticationResult> {
+    const sql = getDatabase();
+    if (!sql) return {configured: false, authenticated: false, sessionToken: null};
+
+    await ensureAdminAuthTable(sql);
+    const passwordSalt = randomBytes(16).toString('hex');
+    const passwordHash = (await derivePasswordHash(candidate, passwordSalt)).toString('hex');
+    const sessionSecret = randomBytes(32).toString('base64url');
+    const rows = await sql`
+        INSERT INTO os_admin_auth (
+            singleton, password_salt, password_hash, session_secret, updated_at
+        )
+        VALUES (TRUE, ${passwordSalt}, ${passwordHash}, ${sessionSecret}, CURRENT_TIMESTAMP)
+        ON CONFLICT (singleton) DO NOTHING
+        RETURNING password_salt, password_hash, session_secret;
+    `;
+
+    if (!rows[0]) return authenticateAdminPassword(candidate);
+    const record = rows[0] as AdminAuthRecord;
+    return {
+        configured: true,
+        authenticated: true,
+        sessionToken: getSessionToken(record),
     };
 }
 

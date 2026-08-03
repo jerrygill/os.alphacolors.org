@@ -4,6 +4,7 @@ import {
     ADMIN_SESSION_MAX_AGE,
     authenticateAdminPassword,
     hasAdminSession,
+    initializeAdminPassword,
 } from '@/lib/admin-auth';
 
 export async function GET() {
@@ -14,7 +15,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null) as {password?: unknown} | null;
     const password = typeof body?.password === 'string' ? body.password : '';
 
-    const authentication = await authenticateAdminPassword(password);
+    let authentication = await authenticateAdminPassword(password);
+    if (!authentication.configured && password) {
+        authentication = await initializeAdminPassword(password);
+    }
     if (!authentication.configured) {
         return NextResponse.json({error: 'Admin password is not configured.'}, {status: 503});
     }
