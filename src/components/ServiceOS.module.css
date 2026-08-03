@@ -134,6 +134,7 @@
 }
 
 .scheduleTable {
+  --container-padding-block-end: var(--spacing-0);
   border-bottom: 2px solid var(--color-border-emphasized);
 }
 
