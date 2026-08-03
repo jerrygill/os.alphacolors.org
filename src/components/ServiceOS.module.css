@@ -1,0 +1,294 @@
+.publicPage,
+.adminPage {
+  min-height: 100dvh;
+  background: var(--color-background-body);
+}
+
+.brandWordmark,
+.utilityLabel,
+.teamRole,
+.sectionKicker,
+.adminBrandName,
+.adminBrandTitle {
+  font-family: var(--font-family-heading);
+  text-transform: uppercase;
+}
+
+.brandWordmark {
+  letter-spacing: -0.035em;
+}
+
+.utilityLabel,
+.teamRole,
+.sectionKicker {
+  letter-spacing: 0.045em;
+}
+
+.heroTitle {
+  display: flex;
+  min-height: 250px;
+  align-items: flex-end;
+  padding-block: clamp(2rem, 5vw, 4.5rem) clamp(1.5rem, 3vw, 2.5rem);
+}
+
+.heroTitle :global(.astryx-heading) {
+  max-width: 11ch;
+  font-size: clamp(4.75rem, 11vw, 9.5rem);
+  font-weight: 800;
+  line-height: 0.78;
+  letter-spacing: -0.055em;
+  text-transform: uppercase;
+}
+
+.heroMeta {
+  display: flex;
+  min-height: 250px;
+  align-items: flex-end;
+  border-inline-start: 1px solid var(--color-border-emphasized);
+  padding: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+.heroDate :global(.astryx-text) {
+  font-family: var(--font-family-heading);
+  font-size: clamp(2.8rem, 5vw, 5.25rem);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+}
+
+.teamRail :global(.astryx-section) {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.teamRail :global(.astryx-text) {
+  color: var(--color-on-accent);
+}
+
+.teamMember {
+  min-width: 0;
+  border-inline-end: 1px solid rgb(255 255 255 / 55%);
+  padding-inline: 0.75rem;
+}
+
+.teamMember:last-child {
+  border-inline-end: 0;
+}
+
+.teamMember :global(.astryx-item) {
+  color: inherit;
+}
+
+.sectionHeader {
+  border-bottom: 2px solid var(--color-border-emphasized);
+  padding-bottom: 0.75rem;
+}
+
+.sectionHeader :global(.astryx-heading) {
+  font-size: clamp(2.5rem, 5vw, 4.25rem);
+  font-weight: 800;
+  line-height: 0.86;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+}
+
+.scheduleTable {
+  border-bottom: 2px solid var(--color-border-emphasized);
+}
+
+.scheduleTable :global(.astryx-table),
+.scheduleTable :global(.astryx-base-table) {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.scheduleTable :global(.astryx-table-header-cell) {
+  border-bottom: 1px solid var(--color-border-emphasized);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-heading);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.scheduleTable :global(.astryx-table-cell) {
+  border-bottom-color: var(--color-border);
+}
+
+.timeCell :global(.astryx-text) {
+  font-family: var(--font-family-heading);
+  font-size: clamp(1.35rem, 2.2vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.durationCell :global(.astryx-text) {
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.eventCell :global(.astryx-text:first-child) {
+  font-size: 1.06rem;
+}
+
+.mobileSchedule {
+  border-top: 2px solid var(--color-border-emphasized);
+  border-bottom: 2px solid var(--color-border-emphasized);
+}
+
+.mobileSchedule :global(.astryx-list-item) {
+  padding-inline: 0;
+}
+
+.mobileTimePair {
+  min-width: 8.5rem;
+}
+
+.editorialSection {
+  border-top: 2px solid var(--color-border-emphasized);
+}
+
+.footer {
+  border-top: 1px solid var(--color-border-emphasized);
+}
+
+.adminGrid {
+  min-height: 100dvh;
+}
+
+.adminBrandPanel,
+.adminFormPanel {
+  min-height: 100dvh;
+}
+
+.adminBrandPanel :global(.astryx-section) {
+  height: 100%;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.adminBrandName {
+  border-bottom: 1px solid rgb(255 255 255 / 75%);
+  padding-bottom: 1.25rem;
+  letter-spacing: -0.03em;
+}
+
+.adminBrandTitle :global(.astryx-text) {
+  color: inherit;
+  font-size: clamp(6rem, 15vw, 13rem);
+  font-weight: 800;
+  line-height: 0.65;
+  letter-spacing: -0.06em;
+  text-transform: uppercase;
+}
+
+.adminFormPanel {
+  display: flex;
+  align-items: center;
+  padding: clamp(2rem, 5vw, 5rem);
+}
+
+.adminFormFrame {
+  width: min(100%, 760px);
+  border-top: 2px solid var(--color-border-emphasized);
+  border-bottom: 2px solid var(--color-border-emphasized);
+  padding-block: clamp(3rem, 8vw, 7rem);
+}
+
+.adminHeading :global(.astryx-heading) {
+  font-size: clamp(4.25rem, 8vw, 7.5rem);
+  font-weight: 800;
+  line-height: 0.78;
+  letter-spacing: -0.055em;
+  text-transform: uppercase;
+}
+
+.adminFormFrame :global(.astryx-field-label),
+.adminFormFrame :global(label) {
+  font-family: var(--font-family-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.adminFormFrame :global(.astryx-text-input),
+.adminFormFrame :global(.astryx-input-group-text) {
+  min-height: 58px;
+}
+
+.adminFormFrame :global(.astryx-button) {
+  min-height: 58px;
+  font-size: 1.15rem;
+}
+
+.adminBrandMobile :global(.astryx-section) {
+  min-height: 190px;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.adminBrandMobile .adminBrandTitle :global(.astryx-text) {
+  font-size: clamp(4.25rem, 22vw, 7rem);
+  line-height: 0.72;
+}
+
+@media (max-width: 899px) {
+  .heroTitle,
+  .heroMeta {
+    min-height: 0;
+  }
+
+  .heroTitle {
+    padding-block: 3rem 2rem;
+  }
+
+  .heroTitle :global(.astryx-heading) {
+    font-size: clamp(4.5rem, 19vw, 7.5rem);
+  }
+
+  .heroMeta {
+    border-top: 1px solid var(--color-border-emphasized);
+    border-inline-start: 0;
+    padding: 1.5rem 0;
+  }
+
+  .teamMember {
+    border-inline-end: 0;
+    border-bottom: 1px solid rgb(255 255 255 / 42%);
+  }
+
+  .adminFormPanel {
+    min-height: auto;
+    padding: 2rem 1rem;
+  }
+
+  .adminFormFrame {
+    padding-block: 3rem;
+  }
+}
+
+@media (max-width: 719px) {
+  .mobileTimePair {
+    min-width: 7.25rem;
+  }
+
+  .sectionHeader :global(.astryx-heading) {
+    font-size: 2.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .publicPage *,
+  .adminPage * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
