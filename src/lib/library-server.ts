@@ -1,12 +1,14 @@
 import 'server-only';
 
 import {getDatabase} from './db';
+import {normalizeAnnouncementOccurrences} from './announcement-utils';
 import {Announcement, AnnouncementPriority, LibraryKind, Song} from './library-types';
 
 type Database = NonNullable<ReturnType<typeof getDatabase>>;
 type DatabaseRow = Record<string, unknown>;
+const tableInitialization = new Map<LibraryKind, Promise<void>>();
 
-export async function ensureLibraryTable(sql: Database, kind: LibraryKind) {
+async function initializeLibraryTable(sql: Database, kind: LibraryKind): Promise<void> {
     if (kind === 'songs') {
         await sql`
             CREATE TABLE IF NOT EXISTS os_songs (
@@ -31,12 +33,34 @@ export async function ensureLibraryTable(sql: Database, kind: LibraryKind) {
             body TEXT NOT NULL DEFAULT '',
             start_date DATE,
             end_date DATE,
+            occurrences JSONB NOT NULL DEFAULT '[]'::jsonb,
+            remarks TEXT NOT NULL DEFAULT '',
             priority TEXT NOT NULL DEFAULT 'medium',
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     `;
+    await sql`
+        ALTER TABLE os_announcements
+            ADD COLUMN IF NOT EXISTS occurrences JSONB NOT NULL DEFAULT '[]'::jsonb,
+            ADD COLUMN IF NOT EXISTS remarks TEXT NOT NULL DEFAULT '';
+    `;
+}
+
+export async function ensureLibraryTable(sql: Database, kind: LibraryKind): Promise<void> {
+    let initialization = tableInitialization.get(kind);
+    if (!initialization) {
+        initialization = initializeLibraryTable(sql, kind);
+        tableInitialization.set(kind, initialization);
+    }
+
+    try {
+        await initialization;
+    } catch (error) {
+        if (tableInitialization.get(kind) === initialization) tableInitialization.delete(kind);
+        throw error;
+    }
 }
 
 function asDateString(value: unknown): string {
@@ -72,6 +96,8 @@ export function mapAnnouncement(row: DatabaseRow): Announcement {
         body: String(row.body || ''),
         startDate: asDateString(row.start_date),
         endDate: asDateString(row.end_date),
+        occurrences: normalizeAnnouncementOccurrences(row.occurrences),
+        remarks: String(row.remarks || ''),
         priority: ['low', 'medium', 'high'].includes(priority) ? priority : 'medium',
         isActive: Boolean(row.is_active),
         createdAt: asIsoString(row.created_at),

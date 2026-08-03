@@ -1,6 +1,10 @@
 import {randomUUID} from 'node:crypto';
 import {NextRequest, NextResponse} from 'next/server';
 import {hasAdminSession} from '@/lib/admin-auth';
+import {
+    isAnnouncementOccurrencesInput,
+    normalizeAnnouncementOccurrences,
+} from '@/lib/announcement-utils';
 import {getDatabase} from '@/lib/db';
 import {ensureLibraryTable, mapAnnouncement, mapSong} from '@/lib/library-server';
 import {AnnouncementInput, LibraryKind, SongInput} from '@/lib/library-types';
@@ -69,15 +73,26 @@ export async function POST(
         }
 
         const announcement = body as AnnouncementInput;
+        if (
+            announcement.occurrences !== undefined
+            && !isAnnouncementOccurrencesInput(announcement.occurrences)
+        ) {
+            return NextResponse.json({error: 'Occurrences must be a valid list.'}, {status: 400});
+        }
         const priority = ['low', 'medium', 'high'].includes(announcement.priority || '')
             ? announcement.priority
             : 'medium';
+        const occurrences = normalizeAnnouncementOccurrences(
+            announcement.occurrences,
+            () => randomUUID(),
+        );
         const rows = await sql`
             INSERT INTO os_announcements
-                (id, title, body, start_date, end_date, priority, is_active)
+                (id, title, body, start_date, end_date, occurrences, remarks, priority, is_active)
             VALUES (
                 ${id}, ${announcement.title.trim()}, ${announcement.body?.trim() || ''},
                 ${announcement.startDate || null}, ${announcement.endDate || null},
+                ${JSON.stringify(occurrences)}::jsonb, ${announcement.remarks?.trim() || ''},
                 ${priority}, ${announcement.isActive ?? true}
             )
             RETURNING *;

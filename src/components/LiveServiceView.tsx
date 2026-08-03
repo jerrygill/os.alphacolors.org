@@ -1,11 +1,12 @@
 'use client';
 
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {AppShell} from '@astryxdesign/core/AppShell';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
 import {Grid} from '@astryxdesign/core/Grid';
+import {Icon} from '@astryxdesign/core/Icon';
 import {Item} from '@astryxdesign/core/Item';
 import {Layout, LayoutContent, LayoutHeader} from '@astryxdesign/core/Layout';
 import {List, ListItem} from '@astryxdesign/core/List';
@@ -16,13 +17,18 @@ import {Table, pixel, proportional} from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
+import {Megaphone, Music2} from 'lucide-react';
 import {getSheetGid, getWeekKey} from '@/lib/date-utils';
+import {isAnnouncementVisible} from '@/lib/announcement-utils';
 import {getLibrary} from '@/lib/library';
 import type {Announcement, Song} from '@/lib/library-types';
 import {recalculateSchedule} from '@/lib/schedule-utils';
 import {fetchSheetData} from '@/lib/sheets';
 import {getWeekData, WeekData} from '@/lib/storage';
 import type {ScheduleItem, ServiceData} from '@/lib/types';
+import ServiceDetailDialog from './ServiceDetailDialog';
+import {getServiceDetail, isLegacyServiceDetailRemark, normalizeServiceText} from './service-details';
+import type {ServiceDetail} from './service-details';
 import styles from './ServiceOS.module.css';
 
 interface PublicServiceData extends ServiceData {
@@ -31,117 +37,110 @@ interface PublicServiceData extends ServiceData {
     announcements: Announcement[];
 }
 
-function normalizeScheduleText(value: string): string {
-    return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
 function getDisplayRemark(item: ScheduleItem): string | undefined {
     const remark = item.remarks?.trim();
     if (!remark) return undefined;
 
-    if (normalizeScheduleText(remark) === normalizeScheduleText(item.event)) return undefined;
+    if (normalizeServiceText(remark) === normalizeServiceText(item.event)) return undefined;
 
     const ledBy = remark.replace(/^led by\s+/i, '');
-    if (item.host && normalizeScheduleText(ledBy) === normalizeScheduleText(item.host)) return undefined;
+    if (item.host && normalizeServiceText(ledBy) === normalizeServiceText(item.host)) return undefined;
 
     return remark;
 }
 
-function getRemarkItems(remark: string): string[] {
-    const cleaned = remark
-        .replace(/^songs?\s*:\s*/i, '')
-        .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
-        .trim();
-    const markers = Array.from(cleaned.matchAll(/(?:^|\s)(\d+)[.)]\s+/g));
-
-    if (markers.length < 2) return [];
-
-    return markers
-        .map((marker, index) => {
-            const start = (marker.index ?? 0) + marker[0].length;
-            const end = markers[index + 1]?.index ?? cleaned.length;
-            return cleaned.slice(start, end).replace(/\s*[+:]\s*$/, '').trim();
-        })
-        .filter(Boolean);
+function detailButtonLabel(detail: ServiceDetail): string {
+    const noun = detail.kind === 'songs' ? 'song' : 'announcement';
+    return `View ${detail.items.length} ${noun}${detail.items.length === 1 ? '' : 's'}`;
 }
 
-function RemarkContent({remark}: {remark: string}) {
-    const items = getRemarkItems(remark);
-
-    if (items.length) {
-        return (
-            <List className={styles.remarkList} density="compact" listStyle="decimal">
-                {items.map((item, index) => (
-                    <ListItem
-                        key={`${index}-${item}`}
-                        label={<Text type="supporting" color="secondary">{item}</Text>}
-                    />
-                ))}
-            </List>
-        );
-    }
-
-    return <Text type="supporting" color="secondary">{remark}</Text>;
-}
-
-const serviceFlowColumns: TableColumn<ScheduleItem>[] = [
-    {
-        key: 'timeFrom',
-        header: 'Time',
-        width: pixel(140),
-        renderCell: (item) => (
-            <div className={styles.timeCell}>
-                <Text weight="bold" hasTabularNumbers>{item.timeFrom}</Text>
-            </div>
-        ),
-    },
-    {
-        key: 'duration',
-        header: 'Duration',
-        width: pixel(110),
-        renderCell: (item) => (
-            <div className={styles.durationCell}>
-                <Text type="supporting" hasTabularNumbers>{item.duration || '0'} min</Text>
-            </div>
-        ),
-    },
-    {
-        key: 'event',
-        header: 'Service flow',
-        width: proportional(3),
-        renderCell: (item) => {
-            const remark = getDisplayRemark(item);
-            return (
-                <div className={styles.eventCell}>
-                    <VStack gap={0.5}>
-                        <Text weight="semibold">{item.event}</Text>
-                        {remark ? (
-                            <div className={styles.eventRemark}>
-                                <RemarkContent remark={remark} />
-                            </div>
-                        ) : null}
-                    </VStack>
+function createServiceFlowColumns(
+    resolveDetail: (item: ScheduleItem) => ServiceDetail | null,
+    openDetail: (detail: ServiceDetail, trigger: HTMLElement) => void,
+): TableColumn<ScheduleItem>[] {
+    return [
+        {
+            key: 'timeFrom',
+            header: 'Time',
+            width: pixel(140),
+            renderCell: (item) => (
+                <div className={styles.timeCell}>
+                    <Text weight="bold" hasTabularNumbers>{item.timeFrom}</Text>
                 </div>
-            );
+            ),
         },
-    },
-    {
-        key: 'host',
-        header: 'Host',
-        width: proportional(1),
-        renderCell: (item) => (
-            <Text weight={item.host ? 'semibold' : undefined} color={item.host ? 'primary' : 'secondary'}>
-                {item.host || '—'}
-            </Text>
-        ),
-    },
-];
+        {
+            key: 'duration',
+            header: 'Duration',
+            width: pixel(110),
+            renderCell: (item) => (
+                <div className={styles.durationCell}>
+                    <Text type="supporting" hasTabularNumbers>{item.duration || '0'} min</Text>
+                </div>
+            ),
+        },
+        {
+            key: 'event',
+            header: 'Service flow',
+            width: proportional(3),
+            renderCell: (item) => {
+                const detail = resolveDetail(item);
+                const remark = isLegacyServiceDetailRemark(item) ? undefined : getDisplayRemark(item);
+                return (
+                    <div className={styles.eventCell}>
+                        <VStack gap={1}>
+                            <Text weight="semibold">{item.event}</Text>
+                            {remark ? (
+                                <div className={styles.eventRemark}>
+                                    <Text type="supporting" color="secondary">{remark}</Text>
+                                </div>
+                            ) : null}
+                            {detail ? (
+                                <div className={styles.detailTrigger}>
+                                    <Button
+                                        label={detailButtonLabel(detail)}
+                                        variant="secondary"
+                                        size="sm"
+                                        icon={<Icon icon={detail.kind === 'songs' ? Music2 : Megaphone} />}
+                                        onClick={(event) => openDetail(detail, event.currentTarget)}
+                                    />
+                                </div>
+                            ) : null}
+                        </VStack>
+                    </div>
+                );
+            },
+        },
+        {
+            key: 'host',
+            header: 'Host',
+            width: proportional(1),
+            renderCell: (item) => (
+                <Text weight={item.host ? 'semibold' : undefined} color={item.host ? 'primary' : 'secondary'}>
+                    {item.host || '—'}
+                </Text>
+            ),
+        },
+    ];
+}
 
 export default function LiveServiceView() {
     const [service, setService] = useState<PublicServiceData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string>();
+    const [activeDetail, setActiveDetail] = useState<ServiceDetail | null>(null);
+    const detailTriggerRef = useRef<HTMLElement | null>(null);
     const isWideLayout = useMediaQuery('(min-width: 720px)');
+
+    function openServiceDetail(detail: ServiceDetail, trigger: HTMLElement) {
+        detailTriggerRef.current = trigger;
+        setActiveDetail(detail);
+    }
+
+    function closeServiceDetail() {
+        setActiveDetail(null);
+        window.requestAnimationFrame(() => detailTriggerRef.current?.focus());
+    }
 
     useEffect(() => {
         let isMounted = true;
@@ -215,7 +214,10 @@ export default function LiveServiceView() {
         .filter((song): song is Song => Boolean(song));
     const selectedAnnouncements = service.weekData.announcementIds
         .map((id) => service.announcements.find((announcement) => announcement.id === id))
-        .filter((announcement): announcement is Announcement => Boolean(announcement));
+        .filter((announcement): announcement is Announcement => Boolean(announcement))
+        .filter((announcement) => isAnnouncementVisible(announcement));
+    const resolveDetail = (item: ScheduleItem) => getServiceDetail(item, selectedSongs, selectedAnnouncements);
+    const serviceFlowColumns = createServiceFlowColumns(resolveDetail, openServiceDetail);
 
     const heroTitle = (
         <div className={styles.heroTitle}>
@@ -309,36 +311,51 @@ export default function LiveServiceView() {
                                             <div className={styles.mobileSchedule}>
                                                 <List density="spacious" hasDividers>
                                                     {service.schedule.map((item) => {
-                                                        const remark = getDisplayRemark(item);
+                                                        const detail = resolveDetail(item);
+                                                        const remark = isLegacyServiceDetailRemark(item) ? undefined : getDisplayRemark(item);
                                                         return (
                                                             <ListItem
                                                                 key={item.id}
                                                                 label={<Text type="large" weight="semibold">{item.event}</Text>}
                                                                 description={
-                                                                    remark ? (
-                                                                        <div className={styles.mobileRemark}>
-                                                                            <RemarkContent remark={remark} />
-                                                                        </div>
+                                                                    remark || detail ? (
+                                                                        <VStack gap={2}>
+                                                                            {remark ? (
+                                                                                <div className={styles.mobileRemark}>
+                                                                                    <Text type="supporting" color="secondary">{remark}</Text>
+                                                                                </div>
+                                                                            ) : null}
+                                                                            {detail ? (
+                                                                                <div className={styles.detailTrigger}>
+                                                                                    <Button
+                                                                                        label={detailButtonLabel(detail)}
+                                                                                        variant="secondary"
+                                                                                        icon={<Icon icon={detail.kind === 'songs' ? Music2 : Megaphone} />}
+                                                                                        onClick={(event) => openServiceDetail(detail, event.currentTarget)}
+                                                                                    />
+                                                                                </div>
+                                                                            ) : null}
+                                                                        </VStack>
                                                                     ) : undefined
                                                                 }
-                                                                endContent={
-                                                                    <div className={styles.mobileHostBadge}>
-                                                                        <Badge
-                                                                            variant="blue"
-                                                                            label={item.host || 'TBC'}
-                                                                            aria-label={`Host: ${item.host || 'To be confirmed'}`}
-                                                                        />
-                                                                    </div>
-                                                                }
                                                                 startContent={
-                                                                    <HStack gap={2} vAlign="end">
-                                                                        <div className={styles.timeCell}>
-                                                                            <Text weight="bold" hasTabularNumbers>{item.timeFrom}</Text>
-                                                                        </div>
-                                                                        <div className={styles.durationCell}>
-                                                                            <Text type="supporting" hasTabularNumbers>{item.duration || '0'} min</Text>
-                                                                        </div>
-                                                                    </HStack>
+                                                                    <div className={styles.mobileRowMeta}>
+                                                                        <VStack gap={1}>
+                                                                            <div className={styles.timeCell}>
+                                                                                <Text weight="bold" hasTabularNumbers>{item.timeFrom}</Text>
+                                                                            </div>
+                                                                            <div className={styles.durationCell}>
+                                                                                <Text type="supporting" hasTabularNumbers>{item.duration || '0'} min</Text>
+                                                                            </div>
+                                                                            <div className={styles.mobileHostBadge}>
+                                                                                <Badge
+                                                                                    variant="blue"
+                                                                                    label={item.host || 'TBC'}
+                                                                                    aria-label={`Host: ${item.host || 'To be confirmed'}`}
+                                                                                />
+                                                                            </div>
+                                                                        </VStack>
+                                                                    </div>
                                                                 }
                                                             />
                                                         );
@@ -351,62 +368,16 @@ export default function LiveServiceView() {
                                     )}
                                 </VStack>
 
-                                {selectedAnnouncements.length ? (
-                                    <div className={styles.editorialSection}>
-                                        <Section variant="transparent" padding={0} paddingBlock={5}>
-                                            <VStack gap={3}>
-                                                <Heading level={2}>Announcements</Heading>
-                                                <List density="balanced" hasDividers>
-                                                    {selectedAnnouncements.map((announcement) => (
-                                                        <ListItem
-                                                            key={announcement.id}
-                                                            label={<Text type="large" weight="semibold">{announcement.title}</Text>}
-                                                            description={<Text color="secondary">{announcement.body}</Text>}
-                                                            endContent={announcement.priority !== 'low' ? (
-                                                                <Text type="supporting" weight="bold">{announcement.priority === 'high' ? 'Important' : 'Notice'}</Text>
-                                                            ) : undefined}
-                                                        />
-                                                    ))}
-                                                </List>
-                                            </VStack>
-                                        </Section>
-                                    </div>
-                                ) : null}
-
-                                {selectedSongs.length ? (
-                                    <div className={styles.editorialSection}>
-                                        <Section variant="transparent" padding={0} paddingBlock={5}>
-                                            <VStack gap={3}>
-                                                <Heading level={2}>Songs</Heading>
-                                                <List density="balanced" hasDividers>
-                                                    {selectedSongs.map((song) => (
-                                                        <ListItem
-                                                            key={song.id}
-                                                            label={<Text type="large" weight="semibold">{song.title}</Text>}
-                                                            description={[song.artist, song.defaultKey ? `Key ${song.defaultKey}` : '', song.bpm ? `${song.bpm} BPM` : ''].filter(Boolean).join(' · ') || 'Song details'}
-                                                            endContent={song.referenceUrl ? (
-                                                                <Button
-                                                                    label="Open reference"
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    href={song.referenceUrl}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                />
-                                                            ) : undefined}
-                                                        />
-                                                    ))}
-                                                </List>
-                                            </VStack>
-                                        </Section>
-                                    </div>
-                                ) : null}
-
                             </VStack>
                         </LayoutContent>
                     }
                 />
             </AppShell>
+            <ServiceDetailDialog
+                detail={activeDetail}
+                isWideLayout={isWideLayout}
+                onClose={closeServiceDetail}
+            />
         </div>
     );
 }

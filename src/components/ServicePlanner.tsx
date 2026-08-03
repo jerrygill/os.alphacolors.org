@@ -44,6 +44,7 @@ import {
     Trash2,
 } from 'lucide-react';
 import {getSheetGid, getWeekKey} from '@/lib/date-utils';
+import {isAnnouncementVisible} from '@/lib/announcement-utils';
 import {getLibrary} from '@/lib/library';
 import type {Announcement, Song} from '@/lib/library-types';
 import {recalculateSchedule} from '@/lib/schedule-utils';
@@ -129,7 +130,12 @@ function ServiceDetails({
     onSaveSongIds,
     onSaveAnnouncementIds,
 }: ServiceDetailsProps) {
-    const activeAnnouncements = announcements.filter((announcement) => announcement.isActive);
+    const visibleAnnouncementIds = new Set(
+        announcements.filter((announcement) => isAnnouncementVisible(announcement)).map(({id}) => id),
+    );
+    const selectableAnnouncements = announcements.filter((announcement) => (
+        visibleAnnouncementIds.has(announcement.id) || selectedAnnouncementIds.includes(announcement.id)
+    ));
 
     return (
         <VStack gap={5}>
@@ -194,20 +200,22 @@ function ServiceDetails({
                 <MultiSelector
                     label="Announcements"
                     isLabelHidden
-                    options={activeAnnouncements.map((announcement) => ({
+                    options={selectableAnnouncements.map((announcement) => ({
                         value: announcement.id,
-                        label: announcement.title,
+                        label: visibleAnnouncementIds.has(announcement.id)
+                            ? announcement.title
+                            : `${announcement.title} — not currently visible`,
                     }))}
                     value={selectedAnnouncementIds}
                     onChange={onAnnouncementIdsChange}
                     changeAction={onSaveAnnouncementIds}
-                    placeholder={activeAnnouncements.length ? 'Select announcements…' : 'Add an active announcement first'}
+                    placeholder={selectableAnnouncements.length ? 'Select announcements…' : 'Add a visible announcement first'}
                     hasSearch
                     hasClear
                     triggerDisplay="count"
                     width="100%"
-                    isDisabled={!activeAnnouncements.length}
-                    disabledMessage="Add or activate an announcement in the library first."
+                    isDisabled={!selectableAnnouncements.length}
+                    disabledMessage="Add or make an announcement visible in the library first."
                 />
             </VStack>
         </VStack>

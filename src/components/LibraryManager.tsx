@@ -5,9 +5,12 @@ import {AlertDialog} from '@astryxdesign/core/AlertDialog';
 import {Badge, type BadgeVariant} from '@astryxdesign/core/Badge';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
+import {Card} from '@astryxdesign/core/Card';
 import {DateInput} from '@astryxdesign/core/DateInput';
 import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {Divider} from '@astryxdesign/core/Divider';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
+import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {
@@ -27,6 +30,7 @@ import {Table, pixel, proportional, type TableColumn} from '@astryxdesign/core/T
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
+import {TimeInput, type ISOTimeString} from '@astryxdesign/core/TimeInput';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Megaphone, Music2, Pencil, Plus, Search, Trash2} from 'lucide-react';
@@ -39,6 +43,7 @@ import {
 import type {
     Announcement,
     AnnouncementInput,
+    AnnouncementOccurrence,
     AnnouncementPriority,
     LibraryKind,
     Song,
@@ -63,6 +68,8 @@ interface SongFormState {
 interface AnnouncementFormState {
     title: string;
     body: string;
+    occurrences: AnnouncementOccurrence[];
+    remarks: string;
     startDate: string;
     endDate: string;
     priority: AnnouncementPriority;
@@ -81,11 +88,22 @@ const EMPTY_SONG: SongFormState = {
 const EMPTY_ANNOUNCEMENT: AnnouncementFormState = {
     title: '',
     body: '',
+    occurrences: [],
+    remarks: '',
     startDate: '',
     endDate: '',
     priority: 'medium',
     isActive: true,
 };
+
+function createOccurrence(): AnnouncementOccurrence {
+    return {
+        id: globalThis.crypto.randomUUID(),
+        date: '',
+        time: '',
+        note: '',
+    };
+}
 
 function isSong(item: LibraryItem): item is Song {
     return 'artist' in item;
@@ -139,7 +157,8 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
             if (isSong(item)) {
                 return `${item.title} ${item.artist} ${item.defaultKey}`.toLowerCase().includes(needle);
             }
-            return `${item.title} ${item.body}`.toLowerCase().includes(needle);
+            const occurrenceText = item.occurrences.map((occurrence) => occurrence.note).join(' ');
+            return `${item.title} ${item.body} ${item.remarks} ${occurrenceText}`.toLowerCase().includes(needle);
         });
     }, [items, query]);
 
@@ -165,6 +184,8 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
             setAnnouncementForm({
                 title: item.title,
                 body: item.body,
+                occurrences: item.occurrences || [],
+                remarks: item.remarks || '',
                 startDate: item.startDate,
                 endDate: item.endDate,
                 priority: item.priority,
@@ -172,6 +193,29 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
             });
         }
         setEditingItem(item);
+    }
+
+    function addOccurrence() {
+        setAnnouncementForm((form) => ({
+            ...form,
+            occurrences: [...form.occurrences, createOccurrence()],
+        }));
+    }
+
+    function updateOccurrence(id: string, update: Partial<AnnouncementOccurrence>) {
+        setAnnouncementForm((form) => ({
+            ...form,
+            occurrences: form.occurrences.map((occurrence) => (
+                occurrence.id === id ? {...occurrence, ...update} : occurrence
+            )),
+        }));
+    }
+
+    function removeOccurrence(id: string) {
+        setAnnouncementForm((form) => ({
+            ...form,
+            occurrences: form.occurrences.filter((occurrence) => occurrence.id !== id),
+        }));
     }
 
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -417,23 +461,26 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
                 if (!open && !isSaving) setEditingItem(null);
             }}
             purpose="form"
-            width={isMobile ? 'calc(100% - 32px)' : 560}
-            maxHeight="90vh"
-            padding={0}
+            variant={isMobile ? 'fullscreen' : 'standard'}
+            width={720}
+            maxHeight="90dvh"
+            padding={4}
         >
-            <form onSubmit={handleSubmit}>
-                <Layout
-                    height="auto"
-                    header={
-                        <DialogHeader
-                            title={`${editingItem === 'new' ? 'Add' : 'Edit'} ${isSongs ? 'song' : 'announcement'}`}
-                            subtitle={isSongs ? 'Save it once, reuse it in any service.' : 'Control when and how prominently it appears.'}
-                            onOpenChange={() => setEditingItem(null)}
-                            hasDivider
-                        />
-                    }
-                    content={
-                        <LayoutContent padding={4}>
+            <Layout
+                height="fill"
+                header={
+                    <DialogHeader
+                        title={`${editingItem === 'new' ? 'Add' : 'Edit'} ${isSongs ? 'song' : 'announcement'}`}
+                        subtitle={isSongs ? 'Save it once, reuse it in any service.' : 'Add repeatable dates and control when it appears.'}
+                        onOpenChange={(open) => {
+                            if (!open && !isSaving) setEditingItem(null);
+                        }}
+                        hasDivider
+                    />
+                }
+                content={
+                    <LayoutContent padding={4}>
+                        <form id="library-item-form" onSubmit={handleSubmit}>
                             <VStack gap={4}>
                                 {error ? <Banner status="error" title="Unable to save" description={error} /> : null}
                                 {isSongs ? (
@@ -448,13 +495,83 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
                                         <TextArea label="Notes" value={songForm.notes} onChange={(notes) => setSongForm((form) => ({...form, notes}))} rows={4} isOptional />
                                     </>
                                 ) : (
-                                    <>
+                                    <FormLayout>
                                         <TextInput label="Title" value={announcementForm.title} onChange={(title) => setAnnouncementForm((form) => ({...form, title}))} isRequired hasAutoFocus />
-                                        <TextArea label="Message" value={announcementForm.body} onChange={(body) => setAnnouncementForm((form) => ({...form, body}))} rows={5} isOptional />
-                                        <HStack gap={3} vAlign="start" wrap="wrap">
-                                            <DateInput label="Starts" value={(announcementForm.startDate || undefined) as ISODateString | undefined} onChange={(startDate) => setAnnouncementForm((form) => ({...form, startDate: startDate || ''}))} hasClear isOptional format="date" />
-                                            <DateInput label="Ends" value={(announcementForm.endDate || undefined) as ISODateString | undefined} onChange={(endDate) => setAnnouncementForm((form) => ({...form, endDate: endDate || ''}))} hasClear isOptional format="date" />
-                                        </HStack>
+                                        <TextArea label="Details" value={announcementForm.body} onChange={(body) => setAnnouncementForm((form) => ({...form, body}))} rows={5} isOptional />
+
+                                        {announcementForm.occurrences.length ? (
+                                            <VStack gap={3}>
+                                                {announcementForm.occurrences.map((occurrence, index) => (
+                                                    <Card
+                                                        key={occurrence.id}
+                                                        variant="muted"
+                                                        padding={3}
+                                                        role="group"
+                                                        aria-label={`Date and time ${index + 1}`}
+                                                    >
+                                                        <VStack gap={3}>
+                                                            <HStack gap={2} hAlign="between" vAlign="center">
+                                                                <Text type="label" weight="semibold">
+                                                                    Date / time {index + 1}
+                                                                </Text>
+                                                                <IconButton
+                                                                    label={`Remove date and time ${index + 1}`}
+                                                                    tooltip="Remove"
+                                                                    icon={<Icon icon={Trash2} />}
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => removeOccurrence(occurrence.id)}
+                                                                />
+                                                            </HStack>
+                                                            <FormLayout direction={isMobile ? 'vertical' : 'horizontal'}>
+                                                                <DateInput
+                                                                    label="Event date"
+                                                                    value={(occurrence.date || undefined) as ISODateString | undefined}
+                                                                    onChange={(date) => updateOccurrence(occurrence.id, {date: date || ''})}
+                                                                    format="date_weekday"
+                                                                    hasClear
+                                                                    isOptional
+                                                                    width="100%"
+                                                                />
+                                                                <TimeInput
+                                                                    label="Event time"
+                                                                    value={(occurrence.time || undefined) as ISOTimeString | undefined}
+                                                                    onChange={(time) => updateOccurrence(occurrence.id, {time: time || ''})}
+                                                                    hourFormat="12h"
+                                                                    increment={15}
+                                                                    hasClear
+                                                                    isOptional
+                                                                    width="100%"
+                                                                />
+                                                            </FormLayout>
+                                                            <TextInput
+                                                                label="Note / location"
+                                                                value={occurrence.note}
+                                                                onChange={(note) => updateOccurrence(occurrence.id, {note})}
+                                                                placeholder="(+Juniors) or Grace Church SA"
+                                                                isOptional
+                                                            />
+                                                        </VStack>
+                                                    </Card>
+                                                ))}
+                                            </VStack>
+                                        ) : null}
+
+                                        <Button
+                                            label="Add date/time"
+                                            variant="secondary"
+                                            icon={<Icon icon={Plus} />}
+                                            onClick={addOccurrence}
+                                            width={isMobile ? '100%' : undefined}
+                                        />
+
+                                        <TextArea
+                                            label="Remarks"
+                                            value={announcementForm.remarks}
+                                            onChange={(remarks) => setAnnouncementForm((form) => ({...form, remarks}))}
+                                            rows={3}
+                                            isOptional
+                                        />
                                         <Selector
                                             label="Priority"
                                             options={[
@@ -466,6 +583,8 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
                                             onChange={(priority) => setAnnouncementForm((form) => ({...form, priority: priority as AnnouncementPriority}))}
                                             width="100%"
                                         />
+
+                                        <Divider label="Visibility" />
                                         <Switch
                                             label="Active"
                                             description="Inactive announcements remain in the library but cannot be selected for display."
@@ -474,21 +593,49 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
                                             labelSpacing="spread"
                                             width="100%"
                                         />
-                                    </>
+                                        <FormLayout direction={isMobile ? 'vertical' : 'horizontal'}>
+                                            <DateInput
+                                                label="Visible from"
+                                                value={(announcementForm.startDate || undefined) as ISODateString | undefined}
+                                                onChange={(startDate) => setAnnouncementForm((form) => ({...form, startDate: startDate || ''}))}
+                                                hasClear
+                                                isOptional
+                                                format="date"
+                                                width="100%"
+                                            />
+                                            <DateInput
+                                                label="Visible until"
+                                                value={(announcementForm.endDate || undefined) as ISODateString | undefined}
+                                                onChange={(endDate) => setAnnouncementForm((form) => ({...form, endDate: endDate || ''}))}
+                                                min={(announcementForm.startDate || undefined) as ISODateString | undefined}
+                                                hasClear
+                                                isOptional
+                                                format="date"
+                                                width="100%"
+                                            />
+                                        </FormLayout>
+                                    </FormLayout>
                                 )}
                             </VStack>
-                        </LayoutContent>
-                    }
-                    footer={
-                        <LayoutFooter hasDivider padding={3}>
-                            <HStack gap={2} hAlign="end">
-                                <Button label="Cancel" variant="ghost" onClick={() => setEditingItem(null)} isDisabled={isSaving} />
-                                <Button label="Save" variant="primary" type="submit" isLoading={isSaving} isDisabled={isSongs ? !songForm.title.trim() : !announcementForm.title.trim()} />
-                            </HStack>
-                        </LayoutFooter>
-                    }
-                />
-            </form>
+                        </form>
+                    </LayoutContent>
+                }
+                footer={
+                    <LayoutFooter hasDivider padding={3}>
+                        <HStack gap={2} hAlign="end">
+                            <Button label="Cancel" variant="ghost" onClick={() => setEditingItem(null)} isDisabled={isSaving} />
+                            <Button
+                                label="Save"
+                                variant="primary"
+                                type="submit"
+                                form="library-item-form"
+                                isLoading={isSaving}
+                                isDisabled={isSongs ? !songForm.title.trim() : !announcementForm.title.trim()}
+                            />
+                        </HStack>
+                    </LayoutFooter>
+                }
+            />
         </Dialog>
         <AlertDialog
             isOpen={deletingItem !== null}

@@ -12,12 +12,21 @@ export interface Song extends Record<string, unknown> {
 
 export type AnnouncementPriority = 'low' | 'medium' | 'high';
 
+export interface AnnouncementOccurrence {
+    id: string;
+    date: string;
+    time: string;
+    note: string;
+}
+
 export interface Announcement extends Record<string, unknown> {
     id: string;
     title: string;
     body: string;
     startDate: string;
     endDate: string;
+    occurrences: AnnouncementOccurrence[];
+    remarks: string;
     priority: AnnouncementPriority;
     isActive: boolean;
     createdAt: string;
@@ -40,6 +49,8 @@ export interface AnnouncementInput {
     body?: string;
     startDate?: string;
     endDate?: string;
+    occurrences?: AnnouncementOccurrence[];
+    remarks?: string;
     priority?: AnnouncementPriority;
     isActive?: boolean;
 }

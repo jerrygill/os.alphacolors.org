@@ -122,7 +122,7 @@
 
 .sectionHeader {
   border-bottom: 2px solid var(--color-border-emphasized);
-  padding-bottom: 0.75rem;
+  padding-block: 0.75rem;
 }
 
 .sectionHeader :global(.astryx-heading) {
@@ -182,15 +182,13 @@
   line-height: 1.35;
 }
 
-.remarkList {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.25rem 1.5rem;
+.detailTrigger {
+  width: fit-content;
 }
 
-.remarkList :global(.astryx-list-item) {
-  border: 0;
-  padding-block: 0.15rem;
+.detailTrigger :global(.astryx-button) {
+  min-height: 36px;
+  cursor: pointer;
 }
 
 .mobileSchedule {
@@ -211,18 +209,91 @@
   line-height: 1.35;
 }
 
+.mobileRowMeta {
+  width: 7rem;
+  align-self: flex-start;
+}
+
+.mobileRowMeta .durationCell :global(.astryx-text) {
+  font-size: 0.88rem;
+  line-height: 1.15;
+}
+
 .mobileHostBadge {
   align-self: flex-start;
-  padding-block-start: 0.1rem;
-  white-space: nowrap;
+  max-width: 100%;
+  padding-block-start: 0.2rem;
 }
 
-.mobileTimePair {
-  min-width: 8.5rem;
+.mobileHostBadge :global(.astryx-badge) {
+  max-width: 100%;
+  height: auto;
+  min-height: 1.65rem;
+  line-height: 1.05;
+  text-align: left;
+  white-space: normal;
 }
 
-.editorialSection {
-  border-top: 2px solid var(--color-border-emphasized);
+.songDetailList :global(.astryx-list-item) {
+  padding-inline: 0;
+}
+
+.songNotes {
+  border-inline-start: 2px solid var(--color-accent);
+}
+
+.dialogAction :global(.astryx-button) {
+  min-height: 44px;
+}
+
+.announcementDetail + .announcementDetail {
+  border-top: 1px solid var(--color-border);
+  padding-top: 1rem;
+}
+
+.announcementDetail :global(.astryx-heading) {
+  font-family: var(--font-family-body);
+  font-size: clamp(1.15rem, 3vw, 1.4rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.announcementCard {
+  border-inline-start: 3px solid var(--color-accent);
+}
+
+.announcementSchedule {
+  padding-inline-start: 2rem;
+}
+
+.announcementOccurrence {
+  border-bottom: 1px solid var(--color-border);
+  padding-block: 0.25rem 0.55rem;
+}
+
+.announcementOccurrence:last-child {
+  border-bottom: 0;
+}
+
+.announcementOccurrenceNote {
+  min-width: 10rem;
+  color: var(--color-text-secondary);
+}
+
+.announcementBody {
+  white-space: pre-wrap;
+}
+
+.announcementBody :global(.astryx-text) {
+  line-height: 1.55;
+}
+
+.announcementRemarks {
+  border-inline-start: 2px solid var(--color-border-emphasized);
+  margin-inline-start: 2rem;
+  padding-inline-start: 0.75rem;
+  white-space: pre-wrap;
 }
 
 .adminGrid {
@@ -308,15 +379,15 @@
 
 @media (max-width: 899px) {
   .heroTitle {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: clamp(0.75rem, 3vw, 1.5rem);
     padding-block: 1rem;
   }
 
   .heroTitle :global(.astryx-heading) {
-    max-width: 8ch;
-    font-size: clamp(4rem, 17vw, 5.75rem);
-    line-height: 0.76;
+    max-width: none;
+    font-size: clamp(2.85rem, 13.5vw, 5.75rem);
+    line-height: 0.78;
     white-space: normal;
   }
 
@@ -343,17 +414,33 @@
 }
 
 @media (max-width: 719px) {
-  .remarkList {
-    grid-template-columns: 1fr;
-    gap: 0.2rem;
+  .mobileRowMeta {
+    width: 6.7rem;
   }
 
-  .mobileTimePair {
-    min-width: 7.25rem;
+  .detailTrigger,
+  .detailTrigger :global(.astryx-button) {
+    width: 100%;
+  }
+
+  .detailTrigger :global(.astryx-button) {
+    min-height: 44px;
   }
 
   .sectionHeader :global(.astryx-heading) {
     font-size: 2.75rem;
+  }
+
+  .announcementSchedule {
+    padding-inline-start: 0;
+  }
+
+  .announcementOccurrenceNote {
+    min-width: 0;
+  }
+
+  .announcementRemarks {
+    margin-inline-start: 0;
   }
 }
 
