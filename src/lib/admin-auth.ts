@@ -1,6 +1,6 @@
 import 'server-only';
 
-import {createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual} from 'node:crypto';
+import {createHash, scrypt as scryptCallback, timingSafeEqual} from 'node:crypto';
 import {promisify} from 'node:util';
 import {cookies} from 'next/headers';
 import {redirect} from 'next/navigation';
@@ -65,46 +65,34 @@ function getSessionToken(record: AdminAuthRecord): string {
         .digest('base64url');
 }
 
+function getEnvironmentSessionToken(): string | null {
+    const password = process.env.ADMIN_PASSWORD;
+    if (!password) return null;
+    return createHash('sha256')
+        .update(`alpha-colors-admin-session:${password}`)
+        .digest('base64url');
+}
+
 export async function authenticateAdminPassword(candidate: string): Promise<AdminAuthenticationResult> {
     const record = await getAdminAuthRecord();
-    if (!record) {
-        return {configured: false, authenticated: false, sessionToken: null};
+    if (record) {
+        const expected = Buffer.from(record.password_hash, 'hex');
+        const actual = await derivePasswordHash(candidate, record.password_salt);
+        const authenticated = expected.length === actual.length && timingSafeEqual(actual, expected);
+        return {
+            configured: true,
+            authenticated,
+            sessionToken: authenticated ? getSessionToken(record) : null,
+        };
     }
 
-    const expected = Buffer.from(record.password_hash, 'hex');
-    const actual = await derivePasswordHash(candidate, record.password_salt);
-    const authenticated = expected.length === actual.length && timingSafeEqual(actual, expected);
-
+    const environmentPassword = process.env.ADMIN_PASSWORD;
+    if (!environmentPassword) return {configured: false, authenticated: false, sessionToken: null};
+    const authenticated = timingSafeEqual(digest(candidate), digest(environmentPassword));
     return {
         configured: true,
         authenticated,
-        sessionToken: authenticated ? getSessionToken(record) : null,
-    };
-}
-
-export async function initializeAdminPassword(candidate: string): Promise<AdminAuthenticationResult> {
-    const sql = getDatabase();
-    if (!sql) return {configured: false, authenticated: false, sessionToken: null};
-
-    await ensureAdminAuthTable(sql);
-    const passwordSalt = randomBytes(16).toString('hex');
-    const passwordHash = (await derivePasswordHash(candidate, passwordSalt)).toString('hex');
-    const sessionSecret = randomBytes(32).toString('base64url');
-    const rows = await sql`
-        INSERT INTO os_admin_auth (
-            singleton, password_salt, password_hash, session_secret, updated_at
-        )
-        VALUES (TRUE, ${passwordSalt}, ${passwordHash}, ${sessionSecret}, CURRENT_TIMESTAMP)
-        ON CONFLICT (singleton) DO NOTHING
-        RETURNING password_salt, password_hash, session_secret;
-    `;
-
-    if (!rows[0]) return authenticateAdminPassword(candidate);
-    const record = rows[0] as AdminAuthRecord;
-    return {
-        configured: true,
-        authenticated: true,
-        sessionToken: getSessionToken(record),
+        sessionToken: authenticated ? getEnvironmentSessionToken() : null,
     };
 }
 
@@ -114,8 +102,9 @@ export async function hasAdminSession(): Promise<boolean> {
     if (!candidate) return false;
 
     const record = await getAdminAuthRecord();
-    if (!record) return false;
-    return timingSafeEqual(digest(candidate), digest(getSessionToken(record)));
+    const expected = record ? getSessionToken(record) : getEnvironmentSessionToken();
+    if (!expected) return false;
+    return timingSafeEqual(digest(candidate), digest(expected));
 }
 
 export async function requireAdmin(): Promise<void> {
