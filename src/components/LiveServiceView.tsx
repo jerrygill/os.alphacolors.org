@@ -4,7 +4,7 @@ import {useEffect, useState} from 'react';
 import {AppShell} from '@astryxdesign/core/AppShell';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
-import {Grid, GridSpan} from '@astryxdesign/core/Grid';
+import {Grid} from '@astryxdesign/core/Grid';
 import {Item} from '@astryxdesign/core/Item';
 import {Layout, LayoutContent, LayoutHeader} from '@astryxdesign/core/Layout';
 import {List, ListItem} from '@astryxdesign/core/List';
@@ -30,8 +30,20 @@ interface PublicServiceData extends ServiceData {
     announcements: Announcement[];
 }
 
-function usesNativeContent(eventName: string): boolean {
-    return /song|praise|worship|announcement/i.test(eventName);
+function normalizeScheduleText(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function getDisplayRemark(item: ScheduleItem): string | undefined {
+    const remark = item.remarks?.trim();
+    if (!remark) return undefined;
+
+    if (normalizeScheduleText(remark) === normalizeScheduleText(item.event)) return undefined;
+
+    const ledBy = remark.replace(/^led by\s+/i, '');
+    if (item.host && normalizeScheduleText(ledBy) === normalizeScheduleText(item.host)) return undefined;
+
+    return remark;
 }
 
 const serviceFlowColumns: TableColumn<ScheduleItem>[] = [
@@ -59,16 +71,21 @@ const serviceFlowColumns: TableColumn<ScheduleItem>[] = [
         key: 'event',
         header: 'Service flow',
         width: proportional(3),
-        renderCell: (item) => (
-            <div className={styles.eventCell}>
-                <VStack gap={0.5}>
-                    <Text weight="semibold">{item.event}</Text>
-                    {!usesNativeContent(item.event) && item.remarks ? (
-                        <Text type="supporting" color="secondary" maxLines={2}>{item.remarks}</Text>
-                    ) : null}
-                </VStack>
-            </div>
-        ),
+        renderCell: (item) => {
+            const remark = getDisplayRemark(item);
+            return (
+                <div className={styles.eventCell}>
+                    <VStack gap={0.5}>
+                        <Text weight="semibold">{item.event}</Text>
+                        {remark ? (
+                            <div className={styles.eventRemark}>
+                                <Text type="supporting" color="secondary" maxLines={2}>{remark}</Text>
+                            </div>
+                        ) : null}
+                    </VStack>
+                </div>
+            );
+        },
     },
     {
         key: 'host',
@@ -87,7 +104,6 @@ export default function LiveServiceView() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string>();
     const isWideLayout = useMediaQuery('(min-width: 720px)');
-    const isHeroWide = useMediaQuery('(min-width: 900px)');
 
     useEffect(() => {
         let isMounted = true;
@@ -143,7 +159,7 @@ export default function LiveServiceView() {
     if (isLoading) {
         return (
             <AppShell height="auto" contentPadding={0} mobileNav={false}>
-                <Layout contentWidth={960} padding={4} content={<LayoutContent padding={6}><ProgressBar label="Loading Sunday service" isIndeterminate /></LayoutContent>} />
+                <Layout contentWidth={960} padding={4} content={<LayoutContent padding={6}><ProgressBar label="Loading order of service" isIndeterminate /></LayoutContent>} />
             </AppShell>
         );
     }
@@ -162,36 +178,19 @@ export default function LiveServiceView() {
     const selectedAnnouncements = service.weekData.announcementIds
         .map((id) => service.announcements.find((announcement) => announcement.id === id))
         .filter((announcement): announcement is Announcement => Boolean(announcement));
-    const serviceTitle = service.title?.trim();
-    const hasDistinctServiceTitle = Boolean(serviceTitle && serviceTitle.toLowerCase() !== 'order of service');
 
     const heroTitle = (
         <div className={styles.heroTitle}>
-            <VStack gap={2}>
-                {hasDistinctServiceTitle ? (
-                    <div className={styles.sectionKicker}>
-                        <Text type="label" weight="bold">{serviceTitle}</Text>
-                    </div>
-                ) : null}
-                <Heading level={1} type="display-1">Order of service</Heading>
-            </VStack>
-        </div>
-    );
-
-    const heroMeta = (
-        <div className={styles.heroMeta}>
-            <VStack gap={5} width="100%">
-                <div className={styles.heroDate}>
-                    <Text type="display-2" hasTabularNumbers>{service.date || 'This Sunday'}</Text>
+            <Heading level={1} type="display-1">Order of service</Heading>
+            <div className={styles.heroHost}>
+                <div className={styles.heroHostLabel}>
+                    <Text type="supporting" weight="bold">Service host</Text>
                 </div>
-                <VStack gap={0.5}>
-                    <div className={styles.utilityLabel}>
-                        <Text type="label" weight="bold">Service host</Text>
-                    </div>
+                <div className={styles.heroHostName}>
                     <Text type="large" weight="semibold">{service.host || 'To be confirmed'}</Text>
-                    {service.notes ? <Text color="secondary">{service.notes}</Text> : null}
-                </VStack>
-            </VStack>
+                </div>
+                {service.notes ? <Text type="supporting" color="secondary">{service.notes}</Text> : null}
+            </div>
         </div>
     );
 
@@ -203,33 +202,22 @@ export default function LiveServiceView() {
                     contentWidth={1280}
                     header={
                         <LayoutHeader padding={4} hasDivider>
-                            <HStack gap={3} hAlign="between" vAlign="center" wrap="wrap">
-                                <HStack gap={4} vAlign="end" wrap="wrap">
-                                    <div className={styles.brandWordmark}>
-                                        <Text type="large" weight="bold">ALPHA COLORS</Text>
-                                    </div>
-                                    <Text weight="semibold">Sunday service</Text>
-                                </HStack>
-                                <div className={styles.utilityLabel}>
-                                    <Text type="supporting" weight="semibold">Order of service</Text>
+                            <HStack gap={3} hAlign="between" vAlign="center" wrap="nowrap">
+                                <div className={styles.brandWordmark}>
+                                    <Text type="large" weight="bold">ALPHA COLORS</Text>
+                                </div>
+                                <div className={styles.headerDate}>
+                                    <Text type="supporting" weight="semibold" hasTabularNumbers>
+                                        SUN <span aria-hidden="true">|</span> {service.date || 'This Sunday'}
+                                    </Text>
                                 </div>
                             </HStack>
                         </LayoutHeader>
                     }
                     content={
                         <LayoutContent padding={4} isScrollable={false}>
-                            <VStack gap={8}>
-                                {isHeroWide ? (
-                                    <Grid columns={4} gap={0}>
-                                        <GridSpan columns={3}>{heroTitle}</GridSpan>
-                                        <GridSpan columns={1}>{heroMeta}</GridSpan>
-                                    </Grid>
-                                ) : (
-                                    <VStack gap={0}>
-                                        {heroTitle}
-                                        {heroMeta}
-                                    </VStack>
-                                )}
+                            <VStack gap={4}>
+                                {heroTitle}
 
                                 {Object.keys(service.team).length ? (
                                     <div className={styles.teamRail}>
@@ -282,32 +270,37 @@ export default function LiveServiceView() {
                                         ) : (
                                             <div className={styles.mobileSchedule}>
                                                 <List density="spacious" hasDividers>
-                                                    {service.schedule.map((item) => (
-                                                        <ListItem
-                                                            key={item.id}
-                                                            label={<Text type="large" weight="semibold">{item.event}</Text>}
-                                                            description={
-                                                                <VStack gap={0.5}>
-                                                                    {!usesNativeContent(item.event) && item.remarks ? (
-                                                                        <Text type="supporting" color="secondary" maxLines={2}>{item.remarks}</Text>
-                                                                    ) : null}
-                                                                    <Text type="supporting" color="secondary">
-                                                                        Host · {item.host || '—'}
-                                                                    </Text>
-                                                                </VStack>
-                                                            }
-                                                            startContent={
-                                                                <HStack gap={2} vAlign="end">
-                                                                    <div className={styles.timeCell}>
-                                                                        <Text weight="bold" hasTabularNumbers>{item.timeFrom}</Text>
-                                                                    </div>
-                                                                    <div className={styles.durationCell}>
-                                                                        <Text type="supporting" hasTabularNumbers>{item.duration || '0'} min</Text>
-                                                                    </div>
-                                                                </HStack>
-                                                            }
-                                                        />
-                                                    ))}
+                                                    {service.schedule.map((item) => {
+                                                        const remark = getDisplayRemark(item);
+                                                        return (
+                                                            <ListItem
+                                                                key={item.id}
+                                                                label={<Text type="large" weight="semibold">{item.event}</Text>}
+                                                                description={
+                                                                    <VStack gap={1}>
+                                                                        {remark ? (
+                                                                            <div className={styles.mobileRemark}>
+                                                                                <Text type="supporting" maxLines={3}>{remark}</Text>
+                                                                            </div>
+                                                                        ) : null}
+                                                                        <Text type="supporting" color="secondary">
+                                                                            Host · {item.host || '—'}
+                                                                        </Text>
+                                                                    </VStack>
+                                                                }
+                                                                startContent={
+                                                                    <HStack gap={2} vAlign="end">
+                                                                        <div className={styles.timeCell}>
+                                                                            <Text weight="bold" hasTabularNumbers>{item.timeFrom}</Text>
+                                                                        </div>
+                                                                        <div className={styles.durationCell}>
+                                                                            <Text type="supporting" hasTabularNumbers>{item.duration || '0'} min</Text>
+                                                                        </div>
+                                                                    </HStack>
+                                                                }
+                                                            />
+                                                        );
+                                                    })}
                                                 </List>
                                             </div>
                                         )
@@ -367,13 +360,6 @@ export default function LiveServiceView() {
                                     </div>
                                 ) : null}
 
-                                <div className={styles.footer}>
-                                    <Section variant="transparent" padding={0}>
-                                        <VStack gap={1} paddingBlock={5}>
-                                            <Text type="supporting" weight="semibold">Alpha Colors Church</Text>
-                                        </VStack>
-                                    </Section>
-                                </div>
                             </VStack>
                         </LayoutContent>
                     }

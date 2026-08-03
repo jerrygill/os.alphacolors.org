@@ -5,6 +5,7 @@
 }
 
 .brandWordmark,
+.headerDate,
 .utilityLabel,
 .teamRole,
 .sectionKicker,
@@ -18,6 +19,16 @@
   letter-spacing: -0.035em;
 }
 
+.headerDate {
+  flex: 0 0 auto;
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+
+.headerDate :global(.astryx-text) {
+  font-size: clamp(0.82rem, 1.4vw, 1rem);
+}
+
 .utilityLabel,
 .teamRole,
 .sectionKicker {
@@ -25,36 +36,47 @@
 }
 
 .heroTitle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: clamp(1.5rem, 4vw, 4rem);
+  padding-block: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+.heroHost {
   display: flex;
-  min-height: 250px;
+  flex-direction: column;
   align-items: flex-end;
-  padding-block: clamp(2rem, 5vw, 4.5rem) clamp(1.5rem, 3vw, 2.5rem);
+  align-self: end;
+  gap: 0.2rem;
+  min-width: 10rem;
+  border-inline-start: 2px solid var(--color-accent);
+  padding: 0.2rem 0 0.25rem clamp(1rem, 2vw, 1.5rem);
+  text-align: right;
+}
+
+.heroHostLabel {
+  font-family: var(--font-family-heading);
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.heroHostLabel :global(.astryx-text) {
+  font-size: 0.75rem;
+}
+
+.heroHostName :global(.astryx-text) {
+  font-size: clamp(1.4rem, 2.2vw, 1.8rem);
+  line-height: 1;
 }
 
 .heroTitle :global(.astryx-heading) {
-  max-width: 11ch;
-  font-size: clamp(4.75rem, 11vw, 9.5rem);
+  font-size: clamp(4.5rem, 8vw, 8rem);
   font-weight: 800;
-  line-height: 0.78;
+  line-height: 0.74;
   letter-spacing: -0.055em;
   text-transform: uppercase;
-}
-
-.heroMeta {
-  display: flex;
-  min-height: 250px;
-  align-items: flex-end;
-  border-inline-start: 1px solid var(--color-border-emphasized);
-  padding: clamp(1.5rem, 3vw, 2.5rem);
-}
-
-.heroDate :global(.astryx-text) {
-  font-family: var(--font-family-heading);
-  font-size: clamp(2.8rem, 5vw, 5.25rem);
-  font-weight: 700;
-  line-height: 0.9;
-  letter-spacing: -0.035em;
-  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .teamRail :global(.astryx-section) {
@@ -64,6 +86,20 @@
 
 .teamRail :global(.astryx-text) {
   color: var(--color-on-accent);
+}
+
+.teamRail .sectionKicker {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.teamRail .sectionKicker::after {
+  height: 1px;
+  flex: 1;
+  background: rgb(255 255 255 / 55%);
+  content: '';
 }
 
 .teamMember {
@@ -78,6 +114,10 @@
 
 .teamMember :global(.astryx-item) {
   color: inherit;
+}
+
+.teamRole :global(.astryx-text) {
+  line-height: 0.92;
 }
 
 .sectionHeader {
@@ -138,6 +178,10 @@
   font-size: 1.06rem;
 }
 
+.eventRemark :global(.astryx-text) {
+  line-height: 1.35;
+}
+
 .mobileSchedule {
   border-top: 2px solid var(--color-border-emphasized);
   border-bottom: 2px solid var(--color-border-emphasized);
@@ -147,16 +191,22 @@
   padding-inline: 0;
 }
 
+.mobileRemark {
+  border-inline-start: 2px solid var(--color-accent);
+  padding-inline-start: 0.55rem;
+}
+
+.mobileRemark :global(.astryx-text) {
+  color: var(--color-text-primary);
+  line-height: 1.35;
+}
+
 .mobileTimePair {
   min-width: 8.5rem;
 }
 
 .editorialSection {
   border-top: 2px solid var(--color-border-emphasized);
-}
-
-.footer {
-  border-top: 1px solid var(--color-border-emphasized);
 }
 
 .adminGrid {
@@ -241,23 +291,25 @@
 }
 
 @media (max-width: 899px) {
-  .heroTitle,
-  .heroMeta {
-    min-height: 0;
-  }
-
   .heroTitle {
-    padding-block: 3rem 2rem;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+    padding-block: 1rem;
   }
 
   .heroTitle :global(.astryx-heading) {
-    font-size: clamp(4.5rem, 19vw, 7.5rem);
+    max-width: 8ch;
+    font-size: clamp(4rem, 17vw, 5.75rem);
+    line-height: 0.76;
+    white-space: normal;
   }
 
-  .heroMeta {
-    border-top: 1px solid var(--color-border-emphasized);
-    border-inline-start: 0;
-    padding: 1.5rem 0;
+  .heroHost {
+    justify-self: end;
+    min-width: 8.5rem;
+    border-inline-start: 2px solid var(--color-accent);
+    padding: 0.2rem 0 0.25rem 1rem;
+    text-align: right;
   }
 
   .teamMember {
