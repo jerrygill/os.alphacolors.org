@@ -112,18 +112,36 @@ export default function ServiceDetailDialog({detail, isWideLayout, onClose}: Ser
                                 {visibleDetail.items.map((song) => (
                                     <ListItem
                                         key={song.id}
-                                        label={<Text type="large" weight="semibold">{song.title}</Text>}
+                                        label={
+                                            <HStack
+                                                className={styles.songTitleRow}
+                                                gap={2}
+                                                hAlign="between"
+                                                vAlign="start"
+                                                width="100%"
+                                            >
+                                                <Text type="large" weight="semibold">{song.title}</Text>
+                                                {song.artist ? (
+                                                    <span className={styles.songArtist} title={song.artist}>
+                                                        <Badge
+                                                            className={styles.songArtistBadge}
+                                                            variant="blue"
+                                                            label={song.artist}
+                                                        />
+                                                    </span>
+                                                ) : null}
+                                            </HStack>
+                                        }
                                         description={
                                             <VStack gap={2}>
-                                                {song.artist || song.defaultKey || song.bpm ? (
+                                                {song.defaultKey || song.bpm ? (
                                                     <HStack gap={1} wrap="wrap" vAlign="center">
-                                                        {song.artist ? <Badge variant="blue" label={song.artist} /> : null}
                                                         {song.defaultKey ? <Badge variant="neutral" label={`Key ${song.defaultKey}`} /> : null}
                                                         {song.bpm ? <Badge variant="neutral" label={`${song.bpm} BPM`} /> : null}
                                                     </HStack>
                                                 ) : null}
                                                 {song.notes ? (
-                                                    <Card className={styles.songNotes} variant="muted" padding={3}>
+                                                    <Card className={styles.songNotes} variant="muted" padding={1.5}>
                                                         <Text type="supporting" color="secondary">{song.notes}</Text>
                                                     </Card>
                                                 ) : null}
@@ -162,6 +180,17 @@ export default function ServiceDetailDialog({detail, isWideLayout, onClose}: Ser
                                                     />
                                                 ) : null}
                                             </HStack>
+                                            {announcement.speaker ? (
+                                                <HStack
+                                                    className={styles.announcementSpeaker}
+                                                    gap={1.5}
+                                                    vAlign="center"
+                                                    wrap="wrap"
+                                                >
+                                                    <Text type="label" weight="bold" color="secondary">Speaker</Text>
+                                                    <Text type="supporting" weight="semibold">{announcement.speaker}</Text>
+                                                </HStack>
+                                            ) : null}
                                             {announcement.occurrences.length ? (
                                                 <VStack className={styles.announcementSchedule} gap={2}>
                                                     {announcement.occurrences.map((occurrence) => {

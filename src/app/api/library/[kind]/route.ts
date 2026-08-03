@@ -73,6 +73,9 @@ export async function POST(
         }
 
         const announcement = body as AnnouncementInput;
+        if (announcement.speaker !== undefined && typeof announcement.speaker !== 'string') {
+            return NextResponse.json({error: 'Speaker must be text.'}, {status: 400});
+        }
         if (
             announcement.occurrences !== undefined
             && !isAnnouncementOccurrencesInput(announcement.occurrences)
@@ -88,9 +91,10 @@ export async function POST(
         );
         const rows = await sql`
             INSERT INTO os_announcements
-                (id, title, body, start_date, end_date, occurrences, remarks, priority, is_active)
+                (id, title, body, speaker, start_date, end_date, occurrences, remarks, priority, is_active)
             VALUES (
                 ${id}, ${announcement.title.trim()}, ${announcement.body?.trim() || ''},
+                ${announcement.speaker?.trim() || ''},
                 ${announcement.startDate || null}, ${announcement.endDate || null},
                 ${JSON.stringify(occurrences)}::jsonb, ${announcement.remarks?.trim() || ''},
                 ${priority}, ${announcement.isActive ?? true}

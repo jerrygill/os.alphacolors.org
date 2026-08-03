@@ -238,6 +238,27 @@
   padding-inline: 0;
 }
 
+.songTitleRow {
+  min-width: 0;
+}
+
+.songTitleRow :global(.astryx-text) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.songArtist {
+  max-width: 45%;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.songArtistBadge {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .songNotes {
   border-inline-start: 2px solid var(--color-accent);
 }
@@ -261,6 +282,17 @@
 
 .announcementCard {
   border-inline-start: 3px solid var(--color-accent);
+}
+
+.announcementSpeaker {
+  min-width: 0;
+  padding-inline-start: 2rem;
+}
+
+.announcementSpeaker :global(.astryx-text) {
+  min-width: 0;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .announcementSchedule {

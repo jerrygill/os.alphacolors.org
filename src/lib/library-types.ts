@@ -23,6 +23,7 @@ export interface Announcement extends Record<string, unknown> {
     id: string;
     title: string;
     body: string;
+    speaker: string;
     startDate: string;
     endDate: string;
     occurrences: AnnouncementOccurrence[];
@@ -47,6 +48,7 @@ export interface SongInput {
 export interface AnnouncementInput {
     title: string;
     body?: string;
+    speaker?: string;
     startDate?: string;
     endDate?: string;
     occurrences?: AnnouncementOccurrence[];

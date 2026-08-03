@@ -47,6 +47,9 @@ export async function PUT(
         }
 
         const announcement = body as AnnouncementInput;
+        if (announcement.speaker !== undefined && typeof announcement.speaker !== 'string') {
+            return NextResponse.json({error: 'Speaker must be text.'}, {status: 400});
+        }
         const hasField = (field: keyof AnnouncementInput) => (
             Object.prototype.hasOwnProperty.call(announcement, field)
         );
@@ -68,6 +71,10 @@ export async function PUT(
                 body = CASE
                     WHEN ${hasField('body')} THEN ${announcement.body?.trim() || ''}
                     ELSE body
+                END,
+                speaker = CASE
+                    WHEN ${hasField('speaker')} THEN ${announcement.speaker?.trim() || ''}
+                    ELSE speaker
                 END,
                 start_date = CASE
                     WHEN ${hasField('startDate')} THEN ${announcement.startDate || null}::date

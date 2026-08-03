@@ -15,6 +15,7 @@ export interface AnnouncementDetail {
     id: string;
     title: string;
     body?: string;
+    speaker?: string;
     occurrences: AnnouncementOccurrenceDetail[];
     remarks?: string;
     priority: AnnouncementPriority;
@@ -224,6 +225,7 @@ function nativeAnnouncements(announcements: Announcement[]): AnnouncementDetail[
         id: announcement.id,
         title: announcement.title,
         body: announcement.body,
+        speaker: announcement.speaker,
         occurrences: (announcement.occurrences || []).map((occurrence) => ({
             id: occurrence.id,
             date: occurrence.date,

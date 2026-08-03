@@ -31,6 +31,7 @@ async function initializeLibraryTable(sql: Database, kind: LibraryKind): Promise
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
             body TEXT NOT NULL DEFAULT '',
+            speaker TEXT NOT NULL DEFAULT '',
             start_date DATE,
             end_date DATE,
             occurrences JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -44,7 +45,8 @@ async function initializeLibraryTable(sql: Database, kind: LibraryKind): Promise
     await sql`
         ALTER TABLE os_announcements
             ADD COLUMN IF NOT EXISTS occurrences JSONB NOT NULL DEFAULT '[]'::jsonb,
-            ADD COLUMN IF NOT EXISTS remarks TEXT NOT NULL DEFAULT '';
+            ADD COLUMN IF NOT EXISTS remarks TEXT NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS speaker TEXT NOT NULL DEFAULT '';
     `;
 }
 
@@ -94,6 +96,7 @@ export function mapAnnouncement(row: DatabaseRow): Announcement {
         id: String(row.id),
         title: String(row.title || ''),
         body: String(row.body || ''),
+        speaker: String(row.speaker || ''),
         startDate: asDateString(row.start_date),
         endDate: asDateString(row.end_date),
         occurrences: normalizeAnnouncementOccurrences(row.occurrences),

@@ -67,6 +67,7 @@ interface SongFormState {
 
 interface AnnouncementFormState {
     title: string;
+    speaker: string;
     body: string;
     occurrences: AnnouncementOccurrence[];
     remarks: string;
@@ -87,6 +88,7 @@ const EMPTY_SONG: SongFormState = {
 
 const EMPTY_ANNOUNCEMENT: AnnouncementFormState = {
     title: '',
+    speaker: '',
     body: '',
     occurrences: [],
     remarks: '',
@@ -158,7 +160,7 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
                 return `${item.title} ${item.artist} ${item.defaultKey}`.toLowerCase().includes(needle);
             }
             const occurrenceText = item.occurrences.map((occurrence) => occurrence.note).join(' ');
-            return `${item.title} ${item.body} ${item.remarks} ${occurrenceText}`.toLowerCase().includes(needle);
+            return `${item.title} ${item.speaker} ${item.body} ${item.remarks} ${occurrenceText}`.toLowerCase().includes(needle);
         });
     }, [items, query]);
 
@@ -183,6 +185,7 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
         } else {
             setAnnouncementForm({
                 title: item.title,
+                speaker: item.speaker || '',
                 body: item.body,
                 occurrences: item.occurrences || [],
                 remarks: item.remarks || '',
@@ -311,6 +314,11 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
                 renderCell: (item) => (
                     <VStack gap={0.5}>
                         <Text weight="semibold">{item.title}</Text>
+                        {!isSong(item) && item.speaker ? (
+                            <Text type="supporting" weight="semibold" color="secondary">
+                                Speaker · {item.speaker}
+                            </Text>
+                        ) : null}
                         <Text type="supporting" color="secondary" maxLines={2}>{isSong(item) ? '' : item.body || 'No description'}</Text>
                     </VStack>
                 ),
@@ -398,7 +406,7 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
                             isLabelHidden
                             value={query}
                             onChange={setQuery}
-                            placeholder={`Search ${isSongs ? 'title, artist, or key' : 'title or message'}…`}
+                            placeholder={`Search ${isSongs ? 'title, artist, or key' : 'title, speaker, or message'}…`}
                             startIcon={Search}
                             hasClear
                             width={isMobile ? '100%' : 360}
@@ -424,7 +432,18 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
                                             label={item.title}
                                             description={isSong(item)
                                                 ? [item.artist, item.defaultKey ? `Key ${item.defaultKey}` : '', item.bpm ? `${item.bpm} BPM` : ''].filter(Boolean).join(' · ') || 'Song details not set'
-                                                : item.body || 'No description'}
+                                                : (
+                                                    <VStack gap={0.5}>
+                                                        {item.speaker ? (
+                                                            <Text type="supporting" weight="semibold" color="secondary">
+                                                                Speaker · {item.speaker}
+                                                            </Text>
+                                                        ) : null}
+                                                        <Text type="supporting" color="secondary" maxLines={2}>
+                                                            {item.body || 'No description'}
+                                                        </Text>
+                                                    </VStack>
+                                                )}
                                             startContent={isSong(item)
                                                 ? <Icon icon={Music2} color="secondary" />
                                                 : <StatusDot variant={item.isActive ? 'success' : 'neutral'} label={item.isActive ? 'Active' : 'Inactive'} />}
@@ -497,6 +516,13 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
                                 ) : (
                                     <FormLayout>
                                         <TextInput label="Title" value={announcementForm.title} onChange={(title) => setAnnouncementForm((form) => ({...form, title}))} isRequired hasAutoFocus />
+                                        <TextInput
+                                            label="Speaker"
+                                            value={announcementForm.speaker}
+                                            onChange={(speaker) => setAnnouncementForm((form) => ({...form, speaker}))}
+                                            placeholder="e.g. Ps Arnold Phua"
+                                            isOptional
+                                        />
                                         <TextArea label="Details" value={announcementForm.body} onChange={(body) => setAnnouncementForm((form) => ({...form, body}))} rows={5} isOptional />
 
                                         {announcementForm.occurrences.length ? (
