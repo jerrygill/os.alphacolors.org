@@ -2,9 +2,8 @@ import {NextRequest, NextResponse} from 'next/server';
 import {
     ADMIN_COOKIE_NAME,
     ADMIN_SESSION_MAX_AGE,
-    getAdminSessionToken,
+    authenticateAdminPassword,
     hasAdminSession,
-    isAdminPassword,
 } from '@/lib/admin-auth';
 
 export async function GET() {
@@ -15,15 +14,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null) as {password?: unknown} | null;
     const password = typeof body?.password === 'string' ? body.password : '';
 
-    if (!process.env.ADMIN_PASSWORD) {
+    const authentication = await authenticateAdminPassword(password);
+    if (!authentication.configured) {
         return NextResponse.json({error: 'Admin password is not configured.'}, {status: 503});
     }
 
-    if (!isAdminPassword(password)) {
+    if (!authentication.authenticated) {
         return NextResponse.json({error: 'Incorrect password.'}, {status: 401});
     }
 
-    const token = getAdminSessionToken();
+    const token = authentication.sessionToken;
     if (!token) {
         return NextResponse.json({error: 'Admin session is unavailable.'}, {status: 503});
     }
