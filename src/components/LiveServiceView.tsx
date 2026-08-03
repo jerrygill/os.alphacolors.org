@@ -2,6 +2,7 @@
 
 import {useEffect, useState} from 'react';
 import {AppShell} from '@astryxdesign/core/AppShell';
+import {Badge} from '@astryxdesign/core/Badge';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
 import {Grid} from '@astryxdesign/core/Grid';
@@ -46,6 +47,43 @@ function getDisplayRemark(item: ScheduleItem): string | undefined {
     return remark;
 }
 
+function getRemarkItems(remark: string): string[] {
+    const cleaned = remark
+        .replace(/^songs?\s*:\s*/i, '')
+        .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+        .trim();
+    const markers = Array.from(cleaned.matchAll(/(?:^|\s)(\d+)[.)]\s+/g));
+
+    if (markers.length < 2) return [];
+
+    return markers
+        .map((marker, index) => {
+            const start = (marker.index ?? 0) + marker[0].length;
+            const end = markers[index + 1]?.index ?? cleaned.length;
+            return cleaned.slice(start, end).replace(/\s*[+:]\s*$/, '').trim();
+        })
+        .filter(Boolean);
+}
+
+function RemarkContent({remark}: {remark: string}) {
+    const items = getRemarkItems(remark);
+
+    if (items.length) {
+        return (
+            <List className={styles.remarkList} density="compact" listStyle="decimal">
+                {items.map((item, index) => (
+                    <ListItem
+                        key={`${index}-${item}`}
+                        label={<Text type="supporting" color="secondary">{item}</Text>}
+                    />
+                ))}
+            </List>
+        );
+    }
+
+    return <Text type="supporting" color="secondary">{remark}</Text>;
+}
+
 const serviceFlowColumns: TableColumn<ScheduleItem>[] = [
     {
         key: 'timeFrom',
@@ -79,7 +117,7 @@ const serviceFlowColumns: TableColumn<ScheduleItem>[] = [
                         <Text weight="semibold">{item.event}</Text>
                         {remark ? (
                             <div className={styles.eventRemark}>
-                                <Text type="supporting" color="secondary" maxLines={2}>{remark}</Text>
+                                <RemarkContent remark={remark} />
                             </div>
                         ) : null}
                     </VStack>
@@ -277,16 +315,20 @@ export default function LiveServiceView() {
                                                                 key={item.id}
                                                                 label={<Text type="large" weight="semibold">{item.event}</Text>}
                                                                 description={
-                                                                    <VStack gap={1}>
-                                                                        {remark ? (
-                                                                            <div className={styles.mobileRemark}>
-                                                                                <Text type="supporting" maxLines={3}>{remark}</Text>
-                                                                            </div>
-                                                                        ) : null}
-                                                                        <Text type="supporting" color="secondary">
-                                                                            Host · {item.host || '—'}
-                                                                        </Text>
-                                                                    </VStack>
+                                                                    remark ? (
+                                                                        <div className={styles.mobileRemark}>
+                                                                            <RemarkContent remark={remark} />
+                                                                        </div>
+                                                                    ) : undefined
+                                                                }
+                                                                endContent={
+                                                                    <div className={styles.mobileHostBadge}>
+                                                                        <Badge
+                                                                            variant="blue"
+                                                                            label={item.host || 'TBC'}
+                                                                            aria-label={`Host: ${item.host || 'To be confirmed'}`}
+                                                                        />
+                                                                    </div>
                                                                 }
                                                                 startContent={
                                                                     <HStack gap={2} vAlign="end">
