@@ -209,14 +209,13 @@ export default function LiveServiceView() {
         );
     }
 
-    const selectedSongs = service.weekData.songIds
-        .map((id) => service.songs.find((song) => song.id === id))
-        .filter((song): song is Song => Boolean(song));
-    const selectedAnnouncements = service.weekData.announcementIds
-        .map((id) => service.announcements.find((announcement) => announcement.id === id))
-        .filter((announcement): announcement is Announcement => Boolean(announcement))
+    const visibleAnnouncements = service.announcements
         .filter((announcement) => isAnnouncementVisible(announcement));
-    const resolveDetail = (item: ScheduleItem) => getServiceDetail(item, selectedSongs, selectedAnnouncements);
+    const resolveDetail = (item: ScheduleItem) => getServiceDetail(
+        item,
+        service.songs,
+        visibleAnnouncements,
+    );
     const serviceFlowColumns = createServiceFlowColumns(resolveDetail, openServiceDetail);
 
     const heroTitle = (

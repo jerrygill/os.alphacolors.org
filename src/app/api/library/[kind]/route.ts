@@ -26,12 +26,12 @@ export async function GET(
     try {
         await ensureLibraryTable(sql, kind);
         if (kind === 'songs') {
-            const rows = await sql`SELECT * FROM os_songs ORDER BY LOWER(title), LOWER(artist);`;
+            const rows = await sql`SELECT * FROM os_songs ORDER BY created_at, id;`;
             return NextResponse.json({items: rows.map((row) => mapSong(row))});
         }
         const rows = await sql`
             SELECT * FROM os_announcements
-            ORDER BY is_active DESC, start_date DESC NULLS LAST, LOWER(title);
+            ORDER BY created_at, id;
         `;
         return NextResponse.json({items: rows.map((row) => mapAnnouncement(row))});
     } catch (error) {

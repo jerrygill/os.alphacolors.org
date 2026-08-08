@@ -260,27 +260,6 @@ function legacyAnnouncements(item: ScheduleItem): AnnouncementDetail[] {
     }));
 }
 
-function mergeSongs(nativeItems: SongDetail[], legacyItems: SongDetail[]): SongDetail[] {
-    return [
-        ...nativeItems,
-        ...legacyItems.filter((legacy) => !nativeItems.some((native) => (
-            normalizeServiceText(native.title) === normalizeServiceText(legacy.title)
-        ))),
-    ];
-}
-
-function mergeAnnouncements(
-    nativeItems: AnnouncementDetail[],
-    legacyItems: AnnouncementDetail[],
-): AnnouncementDetail[] {
-    return [
-        ...nativeItems,
-        ...legacyItems.filter((legacy) => (
-            !nativeItems.some((native) => normalizeServiceText(native.title) === normalizeServiceText(legacy.title))
-        )),
-    ];
-}
-
 export function isLegacyServiceDetailRemark(item: ScheduleItem): boolean {
     const eventName = normalizeServiceText(item.event);
     if (ANNOUNCEMENT_EVENTS.has(eventName)) return legacyAnnouncements(item).length > 0;
@@ -296,7 +275,7 @@ export function getServiceDetail(
     const eventName = normalizeServiceText(item.event);
 
     if (ANNOUNCEMENT_EVENTS.has(eventName)) {
-        const items = mergeAnnouncements(nativeAnnouncements(announcements), legacyAnnouncements(item));
+        const items = nativeAnnouncements(announcements);
         if (items.length) {
             return {
                 kind: 'announcements',
@@ -307,7 +286,7 @@ export function getServiceDetail(
     }
 
     if (SONG_EVENTS.has(eventName)) {
-        const items = mergeSongs(nativeSongs(songs), legacySongs(item));
+        const items = nativeSongs(songs);
         if (items.length) {
             return {
                 kind: 'songs',

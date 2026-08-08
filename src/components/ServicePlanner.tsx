@@ -19,7 +19,6 @@ import {
     LayoutPanel,
 } from '@astryxdesign/core/Layout';
 import {List, ListItem} from '@astryxdesign/core/List';
-import {MultiSelector} from '@astryxdesign/core/MultiSelector';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
 import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
@@ -35,8 +34,6 @@ import {
     ArrowUp,
     Copy,
     Eye,
-    Megaphone,
-    Music2,
     Pencil,
     Plus,
     RotateCcw,
@@ -44,9 +41,6 @@ import {
     Trash2,
 } from 'lucide-react';
 import {getSheetGid, getWeekKey} from '@/lib/date-utils';
-import {isAnnouncementVisible} from '@/lib/announcement-utils';
-import {getLibrary} from '@/lib/library';
-import type {Announcement, Song} from '@/lib/library-types';
 import {recalculateSchedule} from '@/lib/schedule-utils';
 import {fetchSheetData} from '@/lib/sheets';
 import {
@@ -103,40 +97,17 @@ function itemToForm(item: ScheduleItem): ScheduleItemFormState {
 
 interface ServiceDetailsProps {
     details: ServiceDetailsState;
-    songs: Song[];
-    announcements: Announcement[];
-    selectedSongIds: string[];
-    selectedAnnouncementIds: string[];
     isSaving: boolean;
     onDetailsChange: (details: ServiceDetailsState) => void;
     onSaveDetails: () => Promise<void>;
-    onSongIdsChange: (ids: string[]) => void;
-    onAnnouncementIdsChange: (ids: string[]) => void;
-    onSaveSongIds: (ids: string[]) => Promise<void>;
-    onSaveAnnouncementIds: (ids: string[]) => Promise<void>;
 }
 
 function ServiceDetails({
     details,
-    songs,
-    announcements,
-    selectedSongIds,
-    selectedAnnouncementIds,
     isSaving,
     onDetailsChange,
     onSaveDetails,
-    onSongIdsChange,
-    onAnnouncementIdsChange,
-    onSaveSongIds,
-    onSaveAnnouncementIds,
 }: ServiceDetailsProps) {
-    const visibleAnnouncementIds = new Set(
-        announcements.filter((announcement) => isAnnouncementVisible(announcement)).map(({id}) => id),
-    );
-    const selectableAnnouncements = announcements.filter((announcement) => (
-        visibleAnnouncementIds.has(announcement.id) || selectedAnnouncementIds.includes(announcement.id)
-    ));
-
     return (
         <VStack gap={5}>
             <VStack gap={1}>
@@ -166,58 +137,6 @@ function ServiceDetails({
                 ) : null}
                 <Button label="Save service details" variant="secondary" onClick={onSaveDetails} isLoading={isSaving} width="100%" />
             </VStack>
-            <VStack gap={3}>
-                <HStack gap={2} vAlign="center">
-                    <Icon icon={Music2} color="secondary" />
-                    <Text type="label" weight="semibold">Songs for this service</Text>
-                    <Badge label={selectedSongIds.length} variant="neutral" />
-                </HStack>
-                <MultiSelector
-                    label="Songs"
-                    isLabelHidden
-                    options={songs.map((song) => ({
-                        value: song.id,
-                        label: `${song.title}${song.artist ? ` — ${song.artist}` : ''}`,
-                    }))}
-                    value={selectedSongIds}
-                    onChange={onSongIdsChange}
-                    changeAction={onSaveSongIds}
-                    placeholder={songs.length ? 'Select songs…' : 'Add songs in the library first'}
-                    hasSearch
-                    hasClear
-                    triggerDisplay="count"
-                    width="100%"
-                    isDisabled={!songs.length}
-                    disabledMessage="Add a song in the Songs library first."
-                />
-            </VStack>
-            <VStack gap={3}>
-                <HStack gap={2} vAlign="center">
-                    <Icon icon={Megaphone} color="secondary" />
-                    <Text type="label" weight="semibold">Announcements for this service</Text>
-                    <Badge label={selectedAnnouncementIds.length} variant="neutral" />
-                </HStack>
-                <MultiSelector
-                    label="Announcements"
-                    isLabelHidden
-                    options={selectableAnnouncements.map((announcement) => ({
-                        value: announcement.id,
-                        label: visibleAnnouncementIds.has(announcement.id)
-                            ? announcement.title
-                            : `${announcement.title} — not currently visible`,
-                    }))}
-                    value={selectedAnnouncementIds}
-                    onChange={onAnnouncementIdsChange}
-                    changeAction={onSaveAnnouncementIds}
-                    placeholder={selectableAnnouncements.length ? 'Select announcements…' : 'Add a visible announcement first'}
-                    hasSearch
-                    hasClear
-                    triggerDisplay="count"
-                    width="100%"
-                    isDisabled={!selectableAnnouncements.length}
-                    disabledMessage="Add or make an announcement visible in the library first."
-                />
-            </VStack>
         </VStack>
     );
 }
@@ -226,8 +145,6 @@ export default function ServicePlanner() {
     const isMobile = useMediaQuery('(max-width: 767px)');
     const [sheetData, setSheetData] = useState<ServiceData | null>(null);
     const [weekData, setWeekData] = useState<WeekData | null>(null);
-    const [songs, setSongs] = useState<Song[]>([]);
-    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [weekKey, setWeekKey] = useState('');
     const [details, setDetails] = useState<ServiceDetailsState>(EMPTY_DETAILS);
     const [isLoading, setIsLoading] = useState(true);
@@ -250,18 +167,14 @@ export default function ServicePlanner() {
             setWeekKey(currentWeekKey);
 
             try {
-                const [service, savedWeek, loadedSongs, loadedAnnouncements] = await Promise.all([
+                const [service, savedWeek] = await Promise.all([
                     fetchSheetData(getSheetGid(today)),
                     getWeekData(currentWeekKey, true),
-                    getLibrary<Song>('songs'),
-                    getLibrary<Announcement>('announcements'),
                 ]);
                 if (!isMounted) return;
 
                 setSheetData(service);
                 setWeekData(savedWeek);
-                setSongs(loadedSongs);
-                setAnnouncements(loadedAnnouncements);
                 setDetails({
                     title: savedWeek.overrides.title ?? service.title,
                     date: savedWeek.overrides.date ?? service.date,
@@ -520,17 +433,9 @@ export default function ServicePlanner() {
     const detailsEditor = (
         <ServiceDetails
             details={details}
-            songs={songs}
-            announcements={announcements}
-            selectedSongIds={weekData.songIds}
-            selectedAnnouncementIds={weekData.announcementIds}
             isSaving={isSaving}
             onDetailsChange={setDetails}
             onSaveDetails={handleSaveDetails}
-            onSongIdsChange={(songIds) => setWeekData((current) => current ? {...current, songIds} : current)}
-            onAnnouncementIdsChange={(announcementIds) => setWeekData((current) => current ? {...current, announcementIds} : current)}
-            onSaveSongIds={(songIds) => persist({songIds}, 'Song selection saved.')}
-            onSaveAnnouncementIds={(announcementIds) => persist({announcementIds}, 'Announcement selection saved.')}
         />
     );
 
@@ -568,14 +473,14 @@ export default function ServicePlanner() {
                             <Banner
                                 status="info"
                                 title="Native content is now in control"
-                                description="The Google Sheet supplies the initial service order only. Songs, announcements, weekly edits, and publishing are managed here."
+                                description="The Google Sheet supplies the initial service order only. Songs and announcements are managed in their own pages and appear automatically in the main OS."
                                 isDismissable
                             />
                             {success ? <Banner status="success" title={success} isDismissable onDismiss={() => setSuccess(undefined)} /> : null}
                             {error ? <Banner status="error" title="Changes were not saved" description={error} isDismissable onDismiss={() => setError(undefined)} /> : null}
                             {isMobile ? (
                                 <Card padding={4}>
-                                    <Collapsible trigger="Service details, songs, and announcements" defaultIsOpen={false}>
+                                    <Collapsible trigger="Service details" defaultIsOpen={false}>
                                         <VStack paddingBlock={4}>{detailsEditor}</VStack>
                                     </Collapsible>
                                 </Card>
@@ -718,7 +623,7 @@ export default function ServicePlanner() {
                     if (!isSaving) setIsResetOpen(open);
                 }}
                 title="Reset this week?"
-                description="This clears all weekly edits, native selections, and the published snapshot, then returns to the current Google Sheet service order."
+                description="This clears all weekly edits and the published snapshot, then returns to the current Google Sheet service order."
                 actionLabel="Reset week"
                 actionVariant="destructive"
                 isActionLoading={isSaving}
