@@ -14,7 +14,7 @@
 - The Planner controls weekly content membership and order.
 - The public OS changes only after Publish.
 - Empty selection hides the corresponding public detail button.
-- Preserve the current live four-song and six-announcement selection during migration.
+- Preserve the four latest songs prepared for the current service and the six current announcements during migration.
 - Use Astryx components and tokens; do not introduce a second component system.
 
 ---

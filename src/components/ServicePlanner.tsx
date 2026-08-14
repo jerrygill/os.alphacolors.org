@@ -34,6 +34,8 @@ import {
     ArrowUp,
     Copy,
     Eye,
+    Megaphone,
+    Music2,
     Pencil,
     Plus,
     RotateCcw,
@@ -41,6 +43,8 @@ import {
     Trash2,
 } from 'lucide-react';
 import {getSheetGid, getWeekKey} from '@/lib/date-utils';
+import {getLibrary} from '@/lib/library';
+import type {Announcement, Song} from '@/lib/library-types';
 import {recalculateSchedule} from '@/lib/schedule-utils';
 import {fetchSheetData} from '@/lib/sheets';
 import {
@@ -52,6 +56,12 @@ import {
     WeekData,
 } from '@/lib/storage';
 import type {ScheduleItem, ServiceData} from '@/lib/types';
+import ServiceContentPicker, {type ServiceContentOption} from './ServiceContentPicker';
+import {
+    getServiceContentKind,
+    isLegacyServiceDetailRemark,
+    type ServiceContentKind,
+} from './service-details';
 
 interface ServiceDetailsState {
     title: string;
@@ -145,6 +155,8 @@ export default function ServicePlanner() {
     const isMobile = useMediaQuery('(max-width: 767px)');
     const [sheetData, setSheetData] = useState<ServiceData | null>(null);
     const [weekData, setWeekData] = useState<WeekData | null>(null);
+    const [songs, setSongs] = useState<Song[]>([]);
+    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [weekKey, setWeekKey] = useState('');
     const [details, setDetails] = useState<ServiceDetailsState>(EMPTY_DETAILS);
     const [isLoading, setIsLoading] = useState(true);
@@ -155,6 +167,7 @@ export default function ServicePlanner() {
     const [itemForm, setItemForm] = useState<ScheduleItemFormState>(EMPTY_ITEM);
     const [deletingItem, setDeletingItem] = useState<ScheduleItem | null>(null);
     const [isResetOpen, setIsResetOpen] = useState(false);
+    const [contentPickerKind, setContentPickerKind] = useState<ServiceContentKind | null>(null);
 
     useEffect(() => {
         let isMounted = true;
@@ -167,14 +180,18 @@ export default function ServicePlanner() {
             setWeekKey(currentWeekKey);
 
             try {
-                const [service, savedWeek] = await Promise.all([
+                const [service, savedWeek, loadedSongs, loadedAnnouncements] = await Promise.all([
                     fetchSheetData(getSheetGid(today)),
                     getWeekData(currentWeekKey, true),
+                    getLibrary<Song>('songs'),
+                    getLibrary<Announcement>('announcements'),
                 ]);
                 if (!isMounted) return;
 
                 setSheetData(service);
                 setWeekData(savedWeek);
+                setSongs(loadedSongs);
+                setAnnouncements(loadedAnnouncements);
                 setDetails({
                     title: savedWeek.overrides.title ?? service.title,
                     date: savedWeek.overrides.date ?? service.date,
@@ -210,6 +227,68 @@ export default function ServicePlanner() {
         );
     }, [sheetData, weekData]);
 
+    const songOptions = useMemo<ServiceContentOption[]>(() => songs.map((song) => ({
+        id: song.id,
+        title: song.title,
+        supportingText: song.artist || undefined,
+    })), [songs]);
+    const announcementOptions = useMemo<ServiceContentOption[]>(() => announcements.map((announcement) => ({
+        id: announcement.id,
+        title: announcement.title,
+        supportingText: [
+            announcement.speaker,
+            announcement.isActive ? '' : 'Inactive',
+        ].filter(Boolean).join(' · ') || undefined,
+    })), [announcements]);
+
+    function optionsForKind(kind: ServiceContentKind): ServiceContentOption[] {
+        return kind === 'songs' ? songOptions : announcementOptions;
+    }
+
+    function selectedIdsForKind(kind: ServiceContentKind): string[] {
+        if (!weekData) return [];
+        return kind === 'songs' ? weekData.songIds : weekData.announcementIds;
+    }
+
+    function selectedOptionsForKind(kind: ServiceContentKind): ServiceContentOption[] {
+        const optionMap = new Map(optionsForKind(kind).map((option) => [option.id, option]));
+        return selectedIdsForKind(kind)
+            .map((id) => optionMap.get(id))
+            .filter((option): option is ServiceContentOption => Boolean(option));
+    }
+
+    function selectionSummary(kind: ServiceContentKind): string {
+        const selected = selectedOptionsForKind(kind);
+        const noun = kind === 'songs' ? 'song' : 'announcement';
+        if (!selected.length) return `No ${noun}s selected`;
+
+        const titles = selected.slice(0, 2).map((item) => item.title).join(', ');
+        const remaining = selected.length > 2 ? `, +${selected.length - 2}` : '';
+        return `${selected.length} ${noun}${selected.length === 1 ? '' : 's'} selected · ${titles}${remaining}`;
+    }
+
+    function renderContentControl(item: ScheduleItem) {
+        const kind = getServiceContentKind(item);
+        if (!kind) return null;
+        const noun = kind === 'songs' ? 'songs' : 'announcements';
+
+        return (
+            <VStack gap={1.5}>
+                <Text type="supporting" color="secondary" maxLines={2}>{selectionSummary(kind)}</Text>
+                <Button
+                    label={`Choose ${noun}`}
+                    variant="secondary"
+                    size="sm"
+                    icon={<Icon icon={kind === 'songs' ? Music2 : Megaphone} />}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        setContentPickerKind(kind);
+                    }}
+                />
+            </VStack>
+        );
+    }
+
     async function persist(patch: Partial<WeekData>, message?: string) {
         if (!weekKey) return;
         setIsSaving(true);
@@ -225,6 +304,13 @@ export default function ServicePlanner() {
         } finally {
             setIsSaving(false);
         }
+    }
+
+    async function handleSaveContentSelection(kind: ServiceContentKind, selectedIds: string[]) {
+        await persist(
+            kind === 'songs' ? {songIds: selectedIds} : {announcementIds: selectedIds},
+            `${kind === 'songs' ? 'Song' : 'Announcement'} selection saved. Publish to update the public OS.`,
+        );
     }
 
     async function handleSaveDetails() {
@@ -382,12 +468,15 @@ export default function ServicePlanner() {
             header: 'Service flow',
             width: proportional(2),
             renderCell: (item) => (
-                <VStack gap={0.5}>
+                <VStack gap={1.5}>
                     <HStack gap={1.5} vAlign="center">
                         <Text weight="semibold">{item.event}</Text>
                         {item.isCustom || item.isNew ? <Badge label="Native" variant="info" /> : null}
                     </HStack>
-                    {item.remarks ? <Text type="supporting" color="secondary" maxLines={2}>{item.remarks}</Text> : null}
+                    {item.remarks && !isLegacyServiceDetailRemark(item) ? (
+                        <Text type="supporting" color="secondary" maxLines={2}>{item.remarks}</Text>
+                    ) : null}
+                    {renderContentControl(item)}
                 </VStack>
             ),
         },
@@ -472,8 +561,8 @@ export default function ServicePlanner() {
                         <VStack gap={3}>
                             <Banner
                                 status="info"
-                                title="Native content is now in control"
-                                description="The Google Sheet supplies the initial service order only. Songs and announcements are managed in their own pages and appear automatically in the main OS."
+                                title="Choose this service’s content"
+                                description="Choose songs and announcements from their service rows, then publish the service to update the public OS."
                                 isDismissable
                             />
                             {success ? <Banner status="success" title={success} isDismissable onDismiss={() => setSuccess(undefined)} /> : null}
@@ -495,22 +584,32 @@ export default function ServicePlanner() {
                             {isMobile ? (
                                 computedSchedule.length ? (
                                     <List density="compact" hasDividers>
-                                        {computedSchedule.map((item, index) => (
-                                            <ListItem
-                                                key={item.id}
-                                                label={item.event}
-                                                description={`${item.timeFrom}–${item.timeTo} · ${item.duration || '0'} min${item.host ? ` · ${item.host}` : ''}`}
-                                                startContent={<Text weight="semibold" hasTabularNumbers>{String(index + 1).padStart(2, '0')}</Text>}
-                                                endContent={
-                                                    <HStack gap={0.5}>
-                                                        <IconButton label={`Move ${item.event} up`} icon={<Icon icon={ArrowUp} />} variant="ghost" size="sm" isDisabled={index === 0} onClick={() => handleMove(index, -1)} />
-                                                        <IconButton label={`Move ${item.event} down`} icon={<Icon icon={ArrowDown} />} variant="ghost" size="sm" isDisabled={index === computedSchedule.length - 1} onClick={() => handleMove(index, 1)} />
-                                                        <IconButton label={`Edit ${item.event}`} icon={<Icon icon={Pencil} />} variant="ghost" size="sm" onClick={() => openEdit(item)} />
-                                                    </HStack>
-                                                }
-                                                onClick={() => openEdit(item)}
-                                            />
-                                        ))}
+                                        {computedSchedule.map((item, index) => {
+                                            const contentKind = getServiceContentKind(item);
+                                            return (
+                                                <ListItem
+                                                    key={item.id}
+                                                    label={item.event}
+                                                    description={
+                                                        <VStack gap={1.5}>
+                                                            <Text type="supporting" color="secondary" hasTabularNumbers>
+                                                                {item.timeFrom}–{item.timeTo} · {item.duration || '0'} min{item.host ? ` · ${item.host}` : ''}
+                                                            </Text>
+                                                            {renderContentControl(item)}
+                                                        </VStack>
+                                                    }
+                                                    startContent={<Text weight="semibold" hasTabularNumbers>{String(index + 1).padStart(2, '0')}</Text>}
+                                                    endContent={
+                                                        <HStack gap={0.5}>
+                                                            <IconButton label={`Move ${item.event} up`} tooltip="Move up" icon={<Icon icon={ArrowUp} />} variant="ghost" size="sm" isDisabled={index === 0} onClick={() => handleMove(index, -1)} />
+                                                            <IconButton label={`Move ${item.event} down`} tooltip="Move down" icon={<Icon icon={ArrowDown} />} variant="ghost" size="sm" isDisabled={index === computedSchedule.length - 1} onClick={() => handleMove(index, 1)} />
+                                                            <IconButton label={`Edit ${item.event}`} tooltip="Edit" icon={<Icon icon={Pencil} />} variant="ghost" size="sm" onClick={() => openEdit(item)} />
+                                                        </HStack>
+                                                    }
+                                                    onClick={contentKind ? undefined : () => openEdit(item)}
+                                                />
+                                            );
+                                        })}
                                     </List>
                                 ) : (
                                     <EmptyState title="No service items" description="Add the first item to build this service." actions={<Button label="Add item" variant="primary" onClick={openCreate} />} />
@@ -536,6 +635,18 @@ export default function ServicePlanner() {
                     </LayoutPanel>
                 ) : undefined}
             />
+            {contentPickerKind ? (
+                <ServiceContentPicker
+                    kind={contentPickerKind}
+                    items={optionsForKind(contentPickerKind)}
+                    selectedIds={selectedIdsForKind(contentPickerKind)}
+                    isOpen
+                    isMobile={isMobile}
+                    isSaving={isSaving}
+                    onClose={() => setContentPickerKind(null)}
+                    onSave={(selectedIds) => handleSaveContentSelection(contentPickerKind, selectedIds)}
+                />
+            ) : null}
             <Dialog
                 isOpen={editingItem !== null}
                 onOpenChange={(open) => {
@@ -623,7 +734,7 @@ export default function ServicePlanner() {
                     if (!isSaving) setIsResetOpen(open);
                 }}
                 title="Reset this week?"
-                description="This clears all weekly edits and the published snapshot, then returns to the current Google Sheet service order."
+                description="This clears all weekly edits, content selections, and the published snapshot, then returns to the current Google Sheet service order."
                 actionLabel="Reset week"
                 actionVariant="destructive"
                 isActionLoading={isSaving}

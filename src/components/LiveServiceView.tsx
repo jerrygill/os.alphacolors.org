@@ -209,12 +209,19 @@ export default function LiveServiceView() {
         );
     }
 
-    const visibleAnnouncements = service.announcements
+    const songsById = new Map(service.songs.map((song) => [song.id, song]));
+    const announcementsById = new Map(service.announcements.map((announcement) => [announcement.id, announcement]));
+    const selectedSongs = service.weekData.songIds
+        .map((id) => songsById.get(id))
+        .filter((song): song is Song => Boolean(song));
+    const selectedAnnouncements = service.weekData.announcementIds
+        .map((id) => announcementsById.get(id))
+        .filter((announcement): announcement is Announcement => Boolean(announcement))
         .filter((announcement) => isAnnouncementVisible(announcement));
     const resolveDetail = (item: ScheduleItem) => getServiceDetail(
         item,
-        service.songs,
-        visibleAnnouncements,
+        selectedSongs,
+        selectedAnnouncements,
     );
     const serviceFlowColumns = createServiceFlowColumns(resolveDetail, openServiceDetail);
 

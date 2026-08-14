@@ -38,7 +38,7 @@ The library pages remain responsible for catalog fields, search, creation, editi
 
 ## Current-service migration
 
-Before the new filtering behavior reaches production, copy the currently displayed four song identifiers and six announcement identifiers into the current week's draft and published snapshot. Preserve every existing schedule override and publication timestamp. This keeps the live service unchanged until an administrator edits and republishes the selections.
+Before the new filtering behavior reaches production, copy the four latest songs prepared for the current service and the six current announcements into the current week's draft and published snapshot. Preserve every existing schedule override and publication timestamp. This keeps the intended live service content unchanged until an administrator edits and republishes the selections.
 
 ## Failure handling
 

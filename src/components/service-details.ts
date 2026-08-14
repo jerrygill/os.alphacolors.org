@@ -34,6 +34,8 @@ export type ServiceDetail =
     | {kind: 'songs'; title: string; items: SongDetail[]}
     | {kind: 'announcements'; title: string; items: AnnouncementDetail[]};
 
+export type ServiceContentKind = ServiceDetail['kind'];
+
 export function normalizeServiceText(value: string): string {
     return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
@@ -45,6 +47,15 @@ interface NumberedRemark {
 
 const ANNOUNCEMENT_EVENTS = new Set(['announcement', 'announcements']);
 const SONG_EVENTS = new Set(['praise', 'worship', 'praise worship', 'praise and worship']);
+
+export function getServiceContentKind(
+    item: Pick<ScheduleItem, 'event'>,
+): ServiceContentKind | null {
+    const eventName = normalizeServiceText(item.event);
+    if (ANNOUNCEMENT_EVENTS.has(eventName)) return 'announcements';
+    if (SONG_EVENTS.has(eventName)) return 'songs';
+    return null;
+}
 
 function getNumberedRemark(value: string): NumberedRemark {
     const cleaned = value.replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').trim();
@@ -261,9 +272,9 @@ function legacyAnnouncements(item: ScheduleItem): AnnouncementDetail[] {
 }
 
 export function isLegacyServiceDetailRemark(item: ScheduleItem): boolean {
-    const eventName = normalizeServiceText(item.event);
-    if (ANNOUNCEMENT_EVENTS.has(eventName)) return legacyAnnouncements(item).length > 0;
-    if (SONG_EVENTS.has(eventName)) return legacySongs(item).length > 0;
+    const kind = getServiceContentKind(item);
+    if (kind === 'announcements') return legacyAnnouncements(item).length > 0;
+    if (kind === 'songs') return legacySongs(item).length > 0;
     return false;
 }
 
@@ -272,9 +283,9 @@ export function getServiceDetail(
     songs: Song[],
     announcements: Announcement[],
 ): ServiceDetail | null {
-    const eventName = normalizeServiceText(item.event);
+    const kind = getServiceContentKind(item);
 
-    if (ANNOUNCEMENT_EVENTS.has(eventName)) {
+    if (kind === 'announcements') {
         const items = nativeAnnouncements(announcements);
         if (items.length) {
             return {
@@ -285,7 +296,7 @@ export function getServiceDetail(
         }
     }
 
-    if (SONG_EVENTS.has(eventName)) {
+    if (kind === 'songs') {
         const items = nativeSongs(songs);
         if (items.length) {
             return {
