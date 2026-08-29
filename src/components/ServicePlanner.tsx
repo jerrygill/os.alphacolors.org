@@ -37,6 +37,7 @@ import {
     LayoutPanel,
 } from '@astryxdesign/core/Layout';
 import {List, ListItem} from '@astryxdesign/core/List';
+import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
 import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
@@ -204,6 +205,60 @@ interface SortablePlannerItemProps {
     onDelete: (item: ScheduleItem) => void;
 }
 
+type PlannerItemActionsProps = Omit<SortablePlannerItemProps, 'contentControl'>;
+
+function PlannerItemActions({
+    item,
+    index,
+    count,
+    onMove,
+    onDuplicate,
+    onEdit,
+    onDelete,
+}: PlannerItemActionsProps) {
+    return (
+        <HStack gap={0.5} hAlign="end">
+            <IconButton
+                label={`Edit ${item.event}`}
+                tooltip="Edit"
+                icon={<Icon icon={Pencil} />}
+                variant="ghost"
+                size="sm"
+                onClick={() => onEdit(item)}
+            />
+            <MoreMenu
+                label={`More actions for ${item.event}`}
+                size="sm"
+                items={[
+                    {
+                        label: 'Move up',
+                        icon: <Icon icon={ArrowUp} />,
+                        isDisabled: index === 0,
+                        onClick: () => onMove(item.id, -1),
+                    },
+                    {
+                        label: 'Move down',
+                        icon: <Icon icon={ArrowDown} />,
+                        isDisabled: index === count - 1,
+                        onClick: () => onMove(item.id, 1),
+                    },
+                    {type: 'divider'},
+                    {
+                        label: 'Duplicate',
+                        icon: <Icon icon={Copy} />,
+                        onClick: () => onDuplicate(item),
+                    },
+                    {
+                        label: 'Remove',
+                        icon: <Icon icon={Trash2} />,
+                        onClick: () => onDelete(item),
+                    },
+                ]}
+            />
+        </HStack>
+    );
+}
+
 function PlannerDragHandle({
     item,
     setActivatorNodeRef,
@@ -235,7 +290,9 @@ function SortablePlannerMobileItem({
     count,
     contentControl,
     onMove,
+    onDuplicate,
     onEdit,
+    onDelete,
 }: SortablePlannerItemProps) {
     const {attributes, listeners, setActivatorNodeRef, setNodeRef, isDragging} = useSortable({id: item.id});
     return (
@@ -263,11 +320,15 @@ function SortablePlannerMobileItem({
                 />
             }
             endContent={
-                <HStack gap={0.5}>
-                    <IconButton label={`Move ${item.event} up`} tooltip="Move up" icon={<Icon icon={ArrowUp} />} variant="ghost" size="sm" isDisabled={index === 0} onClick={() => onMove(item.id, -1)} />
-                    <IconButton label={`Move ${item.event} down`} tooltip="Move down" icon={<Icon icon={ArrowDown} />} variant="ghost" size="sm" isDisabled={index === count - 1} onClick={() => onMove(item.id, 1)} />
-                    <IconButton label={`Edit ${item.event}`} tooltip="Edit" icon={<Icon icon={Pencil} />} variant="ghost" size="sm" onClick={() => onEdit(item)} />
-                </HStack>
+                <PlannerItemActions
+                    item={item}
+                    index={index}
+                    count={count}
+                    onMove={onMove}
+                    onDuplicate={onDuplicate}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                />
             }
         />
     );
@@ -316,13 +377,15 @@ function SortablePlannerTableRow({
                 <Text color={item.host ? 'primary' : 'secondary'}>{item.host || 'Unassigned'}</Text>
             </TableCell>
             <TableCell>
-                <HStack gap={0.5} hAlign="end">
-                    <IconButton label={`Move ${item.event} up`} icon={<Icon icon={ArrowUp} />} variant="ghost" size="sm" isDisabled={index === 0} onClick={() => onMove(item.id, -1)} />
-                    <IconButton label={`Move ${item.event} down`} icon={<Icon icon={ArrowDown} />} variant="ghost" size="sm" isDisabled={index === count - 1} onClick={() => onMove(item.id, 1)} />
-                    <IconButton label={`Duplicate ${item.event}`} icon={<Icon icon={Copy} />} variant="ghost" size="sm" onClick={() => onDuplicate(item)} />
-                    <IconButton label={`Edit ${item.event}`} icon={<Icon icon={Pencil} />} variant="ghost" size="sm" onClick={() => onEdit(item)} />
-                    <IconButton label={`Remove ${item.event}`} icon={<Icon icon={Trash2} />} variant="ghost" size="sm" onClick={() => onDelete(item)} />
-                </HStack>
+                <PlannerItemActions
+                    item={item}
+                    index={index}
+                    count={count}
+                    onMove={onMove}
+                    onDuplicate={onDuplicate}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                />
             </TableCell>
         </TableRow>
     );

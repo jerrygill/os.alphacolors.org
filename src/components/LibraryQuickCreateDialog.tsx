@@ -160,7 +160,7 @@ export default function LibraryQuickCreateDialog({
                                             <NumberInput label="Tempo" value={songForm.bpm} onChange={(bpm) => setSongForm((form) => ({...form, bpm}))} min={1} max={300} units="BPM" hasClear isOptional width="100%" />
                                         </FormLayout>
                                         <TextInput label="Reference link" value={songForm.referenceUrl} onChange={(referenceUrl) => setSongForm((form) => ({...form, referenceUrl}))} placeholder="YouTube, Spotify, chord chart…" isOptional />
-                                        <TextArea label="Notes" value={songForm.notes} onChange={(notes) => setSongForm((form) => ({...form, notes}))} rows={3} isOptional />
+                                        <TextArea label="Remark" value={songForm.notes} onChange={(notes) => setSongForm((form) => ({...form, notes}))} placeholder="For example, chorus only" rows={3} isOptional />
                                     </>
                                 ) : (
                                     <>

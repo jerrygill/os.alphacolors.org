@@ -255,7 +255,7 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
             },
             {
                 key: 'notes',
-                header: 'Notes',
+                header: 'Remark',
                 width: proportional(2),
                 renderCell: (item) => <Text maxLines={2} color="secondary">{isSong(item) ? item.notes || '—' : '—'}</Text>,
             },
@@ -478,7 +478,7 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
                                             <NumberInput label="Tempo" value={songForm.bpm} onChange={(bpm) => setSongForm((form) => ({...form, bpm}))} min={1} max={300} units="BPM" hasClear isOptional width={180} />
                                         </HStack>
                                         <TextInput label="Reference link" value={songForm.referenceUrl} onChange={(referenceUrl) => setSongForm((form) => ({...form, referenceUrl}))} placeholder="YouTube, Spotify, chord chart…" isOptional />
-                                        <TextArea label="Notes" value={songForm.notes} onChange={(notes) => setSongForm((form) => ({...form, notes}))} rows={4} isOptional />
+                                        <TextArea label="Remark" value={songForm.notes} onChange={(notes) => setSongForm((form) => ({...form, notes}))} placeholder="For example, chorus only" rows={4} isOptional />
                                     </>
                                 ) : (
                                     <FormLayout>
