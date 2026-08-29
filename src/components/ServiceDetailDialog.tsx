@@ -31,6 +31,9 @@ function priorityVariant(priority: AnnouncementDetail['priority']): BadgeVariant
 }
 
 function formatOccurrenceDate(occurrence: AnnouncementOccurrenceDetail): string | undefined {
+    if (occurrence.recurringDay) {
+        return `Every ${occurrence.recurringDay[0].toUpperCase()}${occurrence.recurringDay.slice(1)}`;
+    }
     if (occurrence.dateLabel) return occurrence.dateLabel;
     if (!occurrence.date) return undefined;
 

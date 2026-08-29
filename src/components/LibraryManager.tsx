@@ -5,7 +5,6 @@ import {AlertDialog} from '@astryxdesign/core/AlertDialog';
 import {Badge, type BadgeVariant} from '@astryxdesign/core/Badge';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
-import {Card} from '@astryxdesign/core/Card';
 import {DateInput} from '@astryxdesign/core/DateInput';
 import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
 import {Divider} from '@astryxdesign/core/Divider';
@@ -30,7 +29,6 @@ import {Table, pixel, proportional, type TableColumn} from '@astryxdesign/core/T
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {TimeInput, type ISOTimeString} from '@astryxdesign/core/TimeInput';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Megaphone, Music2, Pencil, Plus, Search, Trash2} from 'lucide-react';
@@ -49,6 +47,7 @@ import type {
     Song,
     SongInput,
 } from '@/lib/library-types';
+import AnnouncementOccurrenceEditor from './AnnouncementOccurrenceEditor';
 
 type LibraryItem = Song | Announcement;
 
@@ -94,18 +93,9 @@ const EMPTY_ANNOUNCEMENT: AnnouncementFormState = {
     remarks: '',
     startDate: '',
     endDate: '',
-    priority: 'medium',
+    priority: 'low',
     isActive: true,
 };
-
-function createOccurrence(): AnnouncementOccurrence {
-    return {
-        id: globalThis.crypto.randomUUID(),
-        date: '',
-        time: '',
-        note: '',
-    };
-}
 
 function isSong(item: LibraryItem): item is Song {
     return 'artist' in item;
@@ -196,29 +186,6 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
             });
         }
         setEditingItem(item);
-    }
-
-    function addOccurrence() {
-        setAnnouncementForm((form) => ({
-            ...form,
-            occurrences: [...form.occurrences, createOccurrence()],
-        }));
-    }
-
-    function updateOccurrence(id: string, update: Partial<AnnouncementOccurrence>) {
-        setAnnouncementForm((form) => ({
-            ...form,
-            occurrences: form.occurrences.map((occurrence) => (
-                occurrence.id === id ? {...occurrence, ...update} : occurrence
-            )),
-        }));
-    }
-
-    function removeOccurrence(id: string) {
-        setAnnouncementForm((form) => ({
-            ...form,
-            occurrences: form.occurrences.filter((occurrence) => occurrence.id !== id),
-        }));
     }
 
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -525,70 +492,13 @@ export default function LibraryManager({kind}: LibraryManagerProps) {
                                         />
                                         <TextArea label="Details" value={announcementForm.body} onChange={(body) => setAnnouncementForm((form) => ({...form, body}))} rows={5} isOptional />
 
-                                        {announcementForm.occurrences.length ? (
-                                            <VStack gap={3}>
-                                                {announcementForm.occurrences.map((occurrence, index) => (
-                                                    <Card
-                                                        key={occurrence.id}
-                                                        variant="muted"
-                                                        padding={3}
-                                                        role="group"
-                                                        aria-label={`Date and time ${index + 1}`}
-                                                    >
-                                                        <VStack gap={3}>
-                                                            <HStack gap={2} hAlign="between" vAlign="center">
-                                                                <Text type="label" weight="semibold">
-                                                                    Date / time {index + 1}
-                                                                </Text>
-                                                                <IconButton
-                                                                    label={`Remove date and time ${index + 1}`}
-                                                                    tooltip="Remove"
-                                                                    icon={<Icon icon={Trash2} />}
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    onClick={() => removeOccurrence(occurrence.id)}
-                                                                />
-                                                            </HStack>
-                                                            <FormLayout direction={isMobile ? 'vertical' : 'horizontal'}>
-                                                                <DateInput
-                                                                    label="Event date"
-                                                                    value={(occurrence.date || undefined) as ISODateString | undefined}
-                                                                    onChange={(date) => updateOccurrence(occurrence.id, {date: date || ''})}
-                                                                    format="date_weekday"
-                                                                    hasClear
-                                                                    isOptional
-                                                                    width="100%"
-                                                                />
-                                                                <TimeInput
-                                                                    label="Event time"
-                                                                    value={(occurrence.time || undefined) as ISOTimeString | undefined}
-                                                                    onChange={(time) => updateOccurrence(occurrence.id, {time: time || ''})}
-                                                                    hourFormat="12h"
-                                                                    increment={15}
-                                                                    hasClear
-                                                                    isOptional
-                                                                    width="100%"
-                                                                />
-                                                            </FormLayout>
-                                                            <TextInput
-                                                                label="Note / location"
-                                                                value={occurrence.note}
-                                                                onChange={(note) => updateOccurrence(occurrence.id, {note})}
-                                                                placeholder="(+Juniors) or Grace Church SA"
-                                                                isOptional
-                                                            />
-                                                        </VStack>
-                                                    </Card>
-                                                ))}
-                                            </VStack>
-                                        ) : null}
-
-                                        <Button
-                                            label="Add date/time"
-                                            variant="secondary"
-                                            icon={<Icon icon={Plus} />}
-                                            onClick={addOccurrence}
-                                            width={isMobile ? '100%' : undefined}
+                                        <AnnouncementOccurrenceEditor
+                                            occurrences={announcementForm.occurrences}
+                                            isMobile={isMobile}
+                                            onChange={(occurrences) => setAnnouncementForm((form) => ({
+                                                ...form,
+                                                occurrences,
+                                            }))}
                                         />
 
                                         <TextArea

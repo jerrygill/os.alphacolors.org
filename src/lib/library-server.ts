@@ -36,7 +36,7 @@ async function initializeLibraryTable(sql: Database, kind: LibraryKind): Promise
             end_date DATE,
             occurrences JSONB NOT NULL DEFAULT '[]'::jsonb,
             remarks TEXT NOT NULL DEFAULT '',
-            priority TEXT NOT NULL DEFAULT 'medium',
+            priority TEXT NOT NULL DEFAULT 'low',
             is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -47,6 +47,10 @@ async function initializeLibraryTable(sql: Database, kind: LibraryKind): Promise
             ADD COLUMN IF NOT EXISTS occurrences JSONB NOT NULL DEFAULT '[]'::jsonb,
             ADD COLUMN IF NOT EXISTS remarks TEXT NOT NULL DEFAULT '',
             ADD COLUMN IF NOT EXISTS speaker TEXT NOT NULL DEFAULT '';
+    `;
+    await sql`
+        ALTER TABLE os_announcements
+            ALTER COLUMN priority SET DEFAULT 'low';
     `;
 }
 
@@ -91,7 +95,7 @@ export function mapSong(row: DatabaseRow): Song {
 }
 
 export function mapAnnouncement(row: DatabaseRow): Announcement {
-    const priority = String(row.priority || 'medium') as AnnouncementPriority;
+    const priority = String(row.priority || 'low') as AnnouncementPriority;
     return {
         id: String(row.id),
         title: String(row.title || ''),
@@ -101,7 +105,7 @@ export function mapAnnouncement(row: DatabaseRow): Announcement {
         endDate: asDateString(row.end_date),
         occurrences: normalizeAnnouncementOccurrences(row.occurrences),
         remarks: String(row.remarks || ''),
-        priority: ['low', 'medium', 'high'].includes(priority) ? priority : 'medium',
+        priority: ['low', 'medium', 'high'].includes(priority) ? priority : 'low',
         isActive: Boolean(row.is_active),
         createdAt: asIsoString(row.created_at),
         updatedAt: asIsoString(row.updated_at),

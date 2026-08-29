@@ -84,7 +84,7 @@ export async function POST(
         }
         const priority = ['low', 'medium', 'high'].includes(announcement.priority || '')
             ? announcement.priority
-            : 'medium';
+            : 'low';
         const occurrences = normalizeAnnouncementOccurrences(
             announcement.occurrences,
             () => randomUUID(),

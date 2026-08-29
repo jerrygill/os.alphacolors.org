@@ -12,9 +12,22 @@ export interface Song extends Record<string, unknown> {
 
 export type AnnouncementPriority = 'low' | 'medium' | 'high';
 
+export const ANNOUNCEMENT_WEEKDAYS = [
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday',
+] as const;
+
+export type AnnouncementWeekday = typeof ANNOUNCEMENT_WEEKDAYS[number];
+
 export interface AnnouncementOccurrence {
     id: string;
     date: string;
+    recurringDay: AnnouncementWeekday | '';
     time: string;
     note: string;
 }

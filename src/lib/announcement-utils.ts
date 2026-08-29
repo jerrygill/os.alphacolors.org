@@ -1,4 +1,9 @@
-import type {Announcement, AnnouncementOccurrence} from './library-types';
+import {
+    ANNOUNCEMENT_WEEKDAYS,
+    type Announcement,
+    type AnnouncementOccurrence,
+    type AnnouncementWeekday,
+} from './library-types';
 
 type OccurrenceIdFactory = (index: number, attempt: number) => string;
 
@@ -43,6 +48,13 @@ function normalizeTime(value: unknown): string {
     return match ? `${match[1]}:${match[2]}` : '';
 }
 
+export function normalizeAnnouncementWeekday(value: unknown): AnnouncementWeekday | '' {
+    const weekday = normalizeText(value).toLowerCase();
+    return ANNOUNCEMENT_WEEKDAYS.includes(weekday as AnnouncementWeekday)
+        ? weekday as AnnouncementWeekday
+        : '';
+}
+
 function parseStoredValue(value: unknown): unknown {
     if (typeof value !== 'string') return value;
 
@@ -75,6 +87,13 @@ export function isAnnouncementOccurrencesInput(value: unknown): boolean {
                 && (!entry.time.trim() || Boolean(normalizeTime(entry.time)))
             )
         )
+        && (
+            entry.recurringDay === undefined
+            || (
+                typeof entry.recurringDay === 'string'
+                && (!entry.recurringDay.trim() || Boolean(normalizeAnnouncementWeekday(entry.recurringDay)))
+            )
+        )
         && (entry.note === undefined || typeof entry.note === 'string')
     ));
 }
@@ -97,10 +116,11 @@ export function normalizeAnnouncementOccurrences(
     return parsed.flatMap((entry, index) => {
         if (!isRecord(entry)) return [];
 
-        const date = normalizeDate(entry.date);
+        const recurringDay = normalizeAnnouncementWeekday(entry.recurringDay);
+        const date = recurringDay ? '' : normalizeDate(entry.date);
         const time = normalizeTime(entry.time);
         const note = normalizeText(entry.note);
-        if (!date && !time && !note) return [];
+        if (!date && !recurringDay && !time && !note) return [];
 
         let id = normalizeText(entry.id);
         let attempt = 0;
@@ -111,7 +131,7 @@ export function normalizeAnnouncementOccurrences(
         }
         usedIds.add(id);
 
-        return [{id, date, time, note}];
+        return [{id, date, recurringDay, time, note}];
     });
 }
 

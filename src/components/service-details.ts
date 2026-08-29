@@ -1,4 +1,9 @@
-import type {Announcement, AnnouncementPriority, Song} from '@/lib/library-types';
+import type {
+    Announcement,
+    AnnouncementPriority,
+    AnnouncementWeekday,
+    Song,
+} from '@/lib/library-types';
 import type {ScheduleItem} from '@/lib/types';
 
 export interface SongDetail {
@@ -24,6 +29,7 @@ export interface AnnouncementDetail {
 export interface AnnouncementOccurrenceDetail {
     id: string;
     date?: string;
+    recurringDay?: AnnouncementWeekday;
     time?: string;
     dateLabel?: string;
     timeLabel?: string;
@@ -240,6 +246,7 @@ function nativeAnnouncements(announcements: Announcement[]): AnnouncementDetail[
         occurrences: (announcement.occurrences || []).map((occurrence) => ({
             id: occurrence.id,
             date: occurrence.date,
+            recurringDay: occurrence.recurringDay || undefined,
             time: occurrence.time,
             note: occurrence.note,
         })),
