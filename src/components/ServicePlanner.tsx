@@ -1,6 +1,24 @@
 'use client';
 
-import {FormEvent, useEffect, useMemo, useState} from 'react';
+import {FormEvent, useEffect, useMemo, useState, type ReactNode} from 'react';
+import {
+    closestCenter,
+    DndContext,
+    DragOverlay,
+    KeyboardSensor,
+    MouseSensor,
+    TouchSensor,
+    useSensor,
+    useSensors,
+    type DragEndEvent,
+    type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import {AlertDialog} from '@astryxdesign/core/AlertDialog';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Banner} from '@astryxdesign/core/Banner';
@@ -23,7 +41,14 @@ import {NumberInput} from '@astryxdesign/core/NumberInput';
 import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
-import {Table, pixel, proportional, type TableColumn} from '@astryxdesign/core/Table';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHeader,
+    TableHeaderCell,
+    TableRow,
+} from '@astryxdesign/core/Table';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
@@ -34,6 +59,7 @@ import {
     ArrowUp,
     Copy,
     Eye,
+    GripVertical,
     Megaphone,
     Music2,
     Pencil,
@@ -45,6 +71,12 @@ import {
 import {getSheetGid, getWeekKey} from '@/lib/date-utils';
 import {getLibrary} from '@/lib/library';
 import type {Announcement, Song} from '@/lib/library-types';
+import {
+    areWeekDraftsEqual,
+    editableWeekData,
+    moveId,
+    moveIdByOffset,
+} from '@/lib/planner-draft';
 import {recalculateSchedule} from '@/lib/schedule-utils';
 import {fetchSheetData} from '@/lib/sheets';
 import {
@@ -107,22 +139,18 @@ function itemToForm(item: ScheduleItem): ScheduleItemFormState {
 
 interface ServiceDetailsProps {
     details: ServiceDetailsState;
-    isSaving: boolean;
     onDetailsChange: (details: ServiceDetailsState) => void;
-    onSaveDetails: () => Promise<void>;
 }
 
 function ServiceDetails({
     details,
-    isSaving,
     onDetailsChange,
-    onSaveDetails,
 }: ServiceDetailsProps) {
     return (
         <VStack gap={5}>
             <VStack gap={1}>
                 <Heading level={2}>Service details</Heading>
-                <Text type="supporting" color="secondary">Edit this week without touching the source sheet.</Text>
+                <Text type="supporting" color="secondary">These fields join the planner draft automatically.</Text>
             </VStack>
             <VStack gap={3}>
                 <TextInput label="Service title" value={details.title} onChange={(title) => onDetailsChange({...details, title})} />
@@ -145,19 +173,170 @@ function ServiceDetails({
                         ))}
                     </VStack>
                 ) : null}
-                <Button label="Save service details" variant="secondary" onClick={onSaveDetails} isLoading={isSaving} width="100%" />
             </VStack>
         </VStack>
+    );
+}
+
+function detailsFromWeek(service: ServiceData, week: WeekData): ServiceDetailsState {
+    return {
+        title: week.overrides.title ?? service.title,
+        date: week.overrides.date ?? service.date,
+        host: week.overrides.host ?? service.host,
+        notes: week.overrides.serviceNotes ?? service.notes ?? '',
+        team: Object.fromEntries(
+            Object.entries(service.team).map(([role, name]) => [
+                role,
+                week.overrides[`team-${role}`] ?? name,
+            ]),
+        ),
+    };
+}
+
+interface SortablePlannerItemProps {
+    item: ScheduleItem;
+    index: number;
+    count: number;
+    contentControl: ReactNode;
+    onMove: (id: string, offset: -1 | 1) => void;
+    onDuplicate: (item: ScheduleItem) => void;
+    onEdit: (item: ScheduleItem) => void;
+    onDelete: (item: ScheduleItem) => void;
+}
+
+function PlannerDragHandle({
+    item,
+    setActivatorNodeRef,
+    attributes,
+    listeners,
+}: {
+    item: ScheduleItem;
+    setActivatorNodeRef: (element: HTMLElement | null) => void;
+    attributes: ReturnType<typeof useSortable>['attributes'];
+    listeners: ReturnType<typeof useSortable>['listeners'];
+}) {
+    return (
+        <IconButton
+            ref={setActivatorNodeRef}
+            label={`Drag ${item.event} to reorder`}
+            tooltip="Drag to reorder"
+            icon={<Icon icon={GripVertical} />}
+            variant="ghost"
+            size="sm"
+            {...attributes}
+            {...listeners}
+        />
+    );
+}
+
+function SortablePlannerMobileItem({
+    item,
+    index,
+    count,
+    contentControl,
+    onMove,
+    onEdit,
+}: SortablePlannerItemProps) {
+    const {attributes, listeners, setActivatorNodeRef, setNodeRef, isDragging} = useSortable({id: item.id});
+    return (
+        <ListItem
+            ref={setNodeRef}
+            data-dragging={isDragging || undefined}
+            label={item.event}
+            description={
+                <VStack gap={1.5}>
+                    <Text type="supporting" color="secondary" hasTabularNumbers>
+                        {item.timeFrom}–{item.timeTo} · {item.duration || '0'} min{item.host ? ` · ${item.host}` : ''}
+                    </Text>
+                    {item.remarks && !isLegacyServiceDetailRemark(item) ? (
+                        <Text type="supporting" color="secondary" maxLines={2}>{item.remarks}</Text>
+                    ) : null}
+                    {contentControl}
+                </VStack>
+            }
+            startContent={
+                <PlannerDragHandle
+                    item={item}
+                    setActivatorNodeRef={setActivatorNodeRef}
+                    attributes={attributes}
+                    listeners={listeners}
+                />
+            }
+            endContent={
+                <HStack gap={0.5}>
+                    <IconButton label={`Move ${item.event} up`} tooltip="Move up" icon={<Icon icon={ArrowUp} />} variant="ghost" size="sm" isDisabled={index === 0} onClick={() => onMove(item.id, -1)} />
+                    <IconButton label={`Move ${item.event} down`} tooltip="Move down" icon={<Icon icon={ArrowDown} />} variant="ghost" size="sm" isDisabled={index === count - 1} onClick={() => onMove(item.id, 1)} />
+                    <IconButton label={`Edit ${item.event}`} tooltip="Edit" icon={<Icon icon={Pencil} />} variant="ghost" size="sm" onClick={() => onEdit(item)} />
+                </HStack>
+            }
+        />
+    );
+}
+
+function SortablePlannerTableRow({
+    item,
+    index,
+    count,
+    contentControl,
+    onMove,
+    onDuplicate,
+    onEdit,
+    onDelete,
+}: SortablePlannerItemProps) {
+    const {attributes, listeners, setActivatorNodeRef, setNodeRef, isDragging} = useSortable({id: item.id});
+    return (
+        <TableRow ref={setNodeRef} data-dragging={isDragging || undefined}>
+            <TableCell>
+                <PlannerDragHandle
+                    item={item}
+                    setActivatorNodeRef={setActivatorNodeRef}
+                    attributes={attributes}
+                    listeners={listeners}
+                />
+            </TableCell>
+            <TableCell>
+                <VStack gap={0.5}>
+                    <Text weight="semibold" hasTabularNumbers>{item.timeFrom}</Text>
+                    <Text type="supporting" color="secondary" hasTabularNumbers>{item.timeTo} · {item.duration || '0'} min</Text>
+                </VStack>
+            </TableCell>
+            <TableCell>
+                <VStack gap={1.5}>
+                    <HStack gap={1.5} vAlign="center">
+                        <Text weight="semibold">{item.event}</Text>
+                        {item.isCustom || item.isNew ? <Badge label="Native" variant="info" /> : null}
+                    </HStack>
+                    {item.remarks && !isLegacyServiceDetailRemark(item) ? (
+                        <Text type="supporting" color="secondary" maxLines={2}>{item.remarks}</Text>
+                    ) : null}
+                    {contentControl}
+                </VStack>
+            </TableCell>
+            <TableCell>
+                <Text color={item.host ? 'primary' : 'secondary'}>{item.host || 'Unassigned'}</Text>
+            </TableCell>
+            <TableCell>
+                <HStack gap={0.5} hAlign="end">
+                    <IconButton label={`Move ${item.event} up`} icon={<Icon icon={ArrowUp} />} variant="ghost" size="sm" isDisabled={index === 0} onClick={() => onMove(item.id, -1)} />
+                    <IconButton label={`Move ${item.event} down`} icon={<Icon icon={ArrowDown} />} variant="ghost" size="sm" isDisabled={index === count - 1} onClick={() => onMove(item.id, 1)} />
+                    <IconButton label={`Duplicate ${item.event}`} icon={<Icon icon={Copy} />} variant="ghost" size="sm" onClick={() => onDuplicate(item)} />
+                    <IconButton label={`Edit ${item.event}`} icon={<Icon icon={Pencil} />} variant="ghost" size="sm" onClick={() => onEdit(item)} />
+                    <IconButton label={`Remove ${item.event}`} icon={<Icon icon={Trash2} />} variant="ghost" size="sm" onClick={() => onDelete(item)} />
+                </HStack>
+            </TableCell>
+        </TableRow>
     );
 }
 
 export default function ServicePlanner() {
     const isMobile = useMediaQuery('(max-width: 767px)');
     const [sheetData, setSheetData] = useState<ServiceData | null>(null);
-    const [weekData, setWeekData] = useState<WeekData | null>(null);
+    const [savedWeekData, setSavedWeekData] = useState<WeekData | null>(null);
+    const [draftWeekData, setDraftWeekData] = useState<WeekData | null>(null);
     const [songs, setSongs] = useState<Song[]>([]);
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [weekKey, setWeekKey] = useState('');
+    const [savedDetails, setSavedDetails] = useState<ServiceDetailsState>(EMPTY_DETAILS);
     const [details, setDetails] = useState<ServiceDetailsState>(EMPTY_DETAILS);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -168,6 +347,12 @@ export default function ServicePlanner() {
     const [deletingItem, setDeletingItem] = useState<ScheduleItem | null>(null);
     const [isResetOpen, setIsResetOpen] = useState(false);
     const [contentPickerKind, setContentPickerKind] = useState<ServiceContentKind | null>(null);
+    const [activeRowId, setActiveRowId] = useState<string>();
+    const sensors = useSensors(
+        useSensor(MouseSensor, {activationConstraint: {distance: 6}}),
+        useSensor(TouchSensor, {activationConstraint: {delay: 150, tolerance: 5}}),
+        useSensor(KeyboardSensor, {coordinateGetter: sortableKeyboardCoordinates}),
+    );
 
     useEffect(() => {
         let isMounted = true;
@@ -189,21 +374,13 @@ export default function ServicePlanner() {
                 if (!isMounted) return;
 
                 setSheetData(service);
-                setWeekData(savedWeek);
+                setSavedWeekData(savedWeek);
+                setDraftWeekData(savedWeek);
                 setSongs(loadedSongs);
                 setAnnouncements(loadedAnnouncements);
-                setDetails({
-                    title: savedWeek.overrides.title ?? service.title,
-                    date: savedWeek.overrides.date ?? service.date,
-                    host: savedWeek.overrides.host ?? service.host,
-                    notes: savedWeek.overrides.serviceNotes ?? service.notes ?? '',
-                    team: Object.fromEntries(
-                        Object.entries(service.team).map(([role, name]) => [
-                            role,
-                            savedWeek.overrides[`team-${role}`] ?? name,
-                        ]),
-                    ),
-                });
+                const loadedDetails = detailsFromWeek(service, savedWeek);
+                setSavedDetails(loadedDetails);
+                setDetails(loadedDetails);
             } catch (loadError) {
                 if (isMounted) setError(loadError instanceof Error ? loadError.message : 'Unable to load the service planner.');
             } finally {
@@ -218,14 +395,22 @@ export default function ServicePlanner() {
     }, []);
 
     const computedSchedule = useMemo(() => {
-        if (!sheetData || !weekData) return [];
+        if (!sheetData || !draftWeekData) return [];
         return recalculateSchedule(
             sheetData.schedule,
-            weekData.overrides,
-            weekData.customActs,
-            weekData.rowOrder,
+            draftWeekData.overrides,
+            draftWeekData.customActs,
+            draftWeekData.rowOrder,
         );
-    }, [sheetData, weekData]);
+    }, [sheetData, draftWeekData]);
+
+    const hasUnsavedChanges = Boolean(savedWeekData && draftWeekData) && (
+        !areWeekDraftsEqual(editableWeekData(savedWeekData!), editableWeekData(draftWeekData!))
+        || JSON.stringify(savedDetails) !== JSON.stringify(details)
+    );
+    const activeRow = activeRowId
+        ? computedSchedule.find((item) => item.id === activeRowId)
+        : undefined;
 
     const songOptions = useMemo<ServiceContentOption[]>(() => songs.map((song) => ({
         id: song.id,
@@ -246,8 +431,8 @@ export default function ServicePlanner() {
     }
 
     function selectedIdsForKind(kind: ServiceContentKind): string[] {
-        if (!weekData) return [];
-        return kind === 'songs' ? weekData.songIds : weekData.announcementIds;
+        if (!draftWeekData) return [];
+        return kind === 'songs' ? draftWeekData.songIds : draftWeekData.announcementIds;
     }
 
     function selectedOptionsForKind(kind: ServiceContentKind): ServiceContentOption[] {
@@ -289,33 +474,31 @@ export default function ServicePlanner() {
         );
     }
 
-    async function persist(patch: Partial<WeekData>, message?: string) {
-        if (!weekKey) return;
-        setIsSaving(true);
-        setError(undefined);
-        try {
-            const saved = await saveWeekData(weekKey, patch);
-            setWeekData(saved);
-            if (message) setSuccess(message);
-        } catch (saveError) {
-            const messageText = saveError instanceof Error ? saveError.message : 'Unable to save changes.';
-            setError(messageText);
-            throw saveError;
-        } finally {
-            setIsSaving(false);
+    function applyContentSelection(kind: ServiceContentKind, selectedIds: string[]) {
+        setDraftWeekData((current) => current ? {
+            ...current,
+            ...(kind === 'songs'
+                ? {songIds: selectedIds}
+                : {announcementIds: selectedIds}),
+        } : current);
+    }
+
+    function handleLibraryItemCreated(kind: ServiceContentKind, item: Song | Announcement) {
+        if (kind === 'songs') {
+            const song = item as Song;
+            setSongs((current) => current.some((song) => song.id === item.id)
+                ? current
+                : [...current, song]);
+            return;
         }
+        const announcement = item as Announcement;
+        setAnnouncements((current) => current.some((announcement) => announcement.id === item.id)
+            ? current
+            : [...current, announcement]);
     }
 
-    async function handleSaveContentSelection(kind: ServiceContentKind, selectedIds: string[]) {
-        await persist(
-            kind === 'songs' ? {songIds: selectedIds} : {announcementIds: selectedIds},
-            `${kind === 'songs' ? 'Song' : 'Announcement'} selection saved. Publish to update the public OS.`,
-        );
-    }
-
-    async function handleSaveDetails() {
-        if (!weekData) return;
-        const overrides = {...weekData.overrides};
+    function overridesWithDetails(): WeekData['overrides'] {
+        const overrides = {...(draftWeekData?.overrides || {})};
         overrides.title = details.title;
         overrides.date = details.date;
         overrides.host = details.host;
@@ -323,15 +506,61 @@ export default function ServicePlanner() {
         Object.entries(details.team).forEach(([role, name]) => {
             overrides[`team-${role}`] = name;
         });
-        await persist({overrides}, 'Service details saved.');
+        return overrides;
     }
 
-    async function handleMove(index: number, direction: -1 | 1) {
-        const targetIndex = index + direction;
-        if (targetIndex < 0 || targetIndex >= computedSchedule.length) return;
+    async function handleSaveChanges() {
+        if (!weekKey || !draftWeekData || !hasUnsavedChanges) return;
+        setIsSaving(true);
+        setError(undefined);
+        try {
+            const payload = editableWeekData({
+                ...draftWeekData,
+                overrides: overridesWithDetails(),
+            });
+            const saved = await saveWeekData(weekKey, payload);
+            setSavedWeekData(saved);
+            setDraftWeekData(saved);
+            setSavedDetails(details);
+            setSuccess('Planner changes saved. Publish when this service is ready.');
+        } catch (saveError) {
+            setError(saveError instanceof Error ? saveError.message : 'Unable to save changes.');
+        } finally {
+            setIsSaving(false);
+        }
+    }
+
+    function handleDiscardChanges() {
+        if (!savedWeekData) return;
+        setDraftWeekData(savedWeekData);
+        setDetails(savedDetails);
+        setError(undefined);
+        setSuccess('Unsaved changes discarded.');
+    }
+
+    function handleMove(id: string, direction: -1 | 1) {
         const order = computedSchedule.map((item) => item.id);
-        [order[index], order[targetIndex]] = [order[targetIndex], order[index]];
-        await persist({rowOrder: order});
+        setDraftWeekData((current) => current ? {
+            ...current,
+            rowOrder: moveIdByOffset(order, id, direction),
+        } : current);
+    }
+
+    function handleRowDragStart(event: DragStartEvent) {
+        setActiveRowId(String(event.active.id));
+    }
+
+    function handleRowDragEnd(event: DragEndEvent) {
+        const activeId = String(event.active.id);
+        const overId = event.over ? String(event.over.id) : undefined;
+        if (overId && overId !== activeId) {
+            const order = computedSchedule.map((item) => item.id);
+            setDraftWeekData((current) => current ? {
+                ...current,
+                rowOrder: moveId(order, activeId, overId),
+            } : current);
+        }
+        setActiveRowId(undefined);
     }
 
     function openCreate() {
@@ -344,12 +573,12 @@ export default function ServicePlanner() {
         setEditingItem(item);
     }
 
-    async function handleSaveItem(event: FormEvent<HTMLFormElement>) {
+    function handleSaveItem(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        if (!weekData) return;
+        if (!draftWeekData) return;
 
         if (editingItem === 'new') {
-            const id = `custom-${Date.now()}`;
+            const id = `custom-${globalThis.crypto.randomUUID()}`;
             const customItem: CustomAct = {
                 id,
                 event: itemForm.event.trim(),
@@ -360,27 +589,28 @@ export default function ServicePlanner() {
                 remarks: itemForm.remarks,
                 isNew: true,
             };
-            await persist({
-                customActs: [...weekData.customActs, customItem],
+            setDraftWeekData({
+                ...draftWeekData,
+                customActs: [...draftWeekData.customActs, customItem],
                 rowOrder: [...computedSchedule.map((item) => item.id), id],
-            }, 'Service item added.');
+            });
         } else if (editingItem) {
             const overrides = {
-                ...weekData.overrides,
+                ...draftWeekData.overrides,
                 [`${editingItem.id}-event`]: itemForm.event.trim(),
                 [`${editingItem.id}-timeFrom`]: itemForm.timeFrom,
                 [`${editingItem.id}-duration`]: itemForm.duration,
                 [`${editingItem.id}-host`]: itemForm.host,
                 [`${editingItem.id}-remarks`]: itemForm.remarks,
             };
-            await persist({overrides}, 'Service item updated.');
+            setDraftWeekData({...draftWeekData, overrides});
         }
         setEditingItem(null);
     }
 
-    async function handleDuplicate(item: ScheduleItem) {
-        if (!weekData) return;
-        const id = `custom-${Date.now()}`;
+    function handleDuplicate(item: ScheduleItem) {
+        if (!draftWeekData) return;
+        const id = `custom-${globalThis.crypto.randomUUID()}`;
         const customItem: CustomAct = {
             ...item,
             id,
@@ -391,22 +621,28 @@ export default function ServicePlanner() {
         const order = computedSchedule.map((current) => current.id);
         const index = order.indexOf(item.id);
         order.splice(index + 1, 0, id);
-        await persist({customActs: [...weekData.customActs, customItem], rowOrder: order}, 'Service item duplicated.');
+        setDraftWeekData({
+            ...draftWeekData,
+            customActs: [...draftWeekData.customActs, customItem],
+            rowOrder: order,
+        });
     }
 
-    async function handleDelete() {
-        if (!weekData || !deletingItem) return;
+    function handleDelete() {
+        if (!draftWeekData || !deletingItem) return;
         const rowOrder = computedSchedule.map((item) => item.id).filter((id) => id !== deletingItem.id);
         if (deletingItem.isCustom || deletingItem.isNew) {
-            await persist({
-                customActs: weekData.customActs.filter((item) => item.id !== deletingItem.id),
+            setDraftWeekData({
+                ...draftWeekData,
+                customActs: draftWeekData.customActs.filter((item) => item.id !== deletingItem.id),
                 rowOrder,
-            }, 'Service item removed.');
+            });
         } else {
-            await persist({
-                overrides: {...weekData.overrides, [`${deletingItem.id}-hidden`]: 'true'},
+            setDraftWeekData({
+                ...draftWeekData,
+                overrides: {...draftWeekData.overrides, [`${deletingItem.id}-hidden`]: 'true'},
                 rowOrder,
-            }, 'Service item removed.');
+            });
         }
         setDeletingItem(null);
     }
@@ -417,15 +653,12 @@ export default function ServicePlanner() {
         setError(undefined);
         try {
             const cleared = await clearWeekData(weekKey);
-            setWeekData(cleared);
+            setSavedWeekData(cleared);
+            setDraftWeekData(cleared);
             if (sheetData) {
-                setDetails({
-                    title: sheetData.title,
-                    date: sheetData.date,
-                    host: sheetData.host,
-                    notes: sheetData.notes || '',
-                    team: sheetData.team,
-                });
+                const resetDetails = detailsFromWeek(sheetData, cleared);
+                setSavedDetails(resetDetails);
+                setDetails(resetDetails);
             }
             setIsResetOpen(false);
             setSuccess('This week was reset to the sheet source.');
@@ -437,12 +670,13 @@ export default function ServicePlanner() {
     }
 
     async function handlePublish() {
-        if (!weekKey) return;
+        if (!weekKey || hasUnsavedChanges) return;
         setIsSaving(true);
         setError(undefined);
         try {
             const published = await publishWeekData(weekKey);
-            setWeekData(published);
+            setSavedWeekData(published);
+            setDraftWeekData(published);
             setSuccess('Service published to the public page.');
         } catch (publishError) {
             setError(publishError instanceof Error ? publishError.message : 'Unable to publish this service.');
@@ -451,69 +685,13 @@ export default function ServicePlanner() {
         }
     }
 
-    const columns: TableColumn<ScheduleItem>[] = [
-        {
-            key: 'timeFrom',
-            header: 'Time',
-            width: pixel(120),
-            renderCell: (item) => (
-                <VStack gap={0.5}>
-                    <Text weight="semibold" hasTabularNumbers>{item.timeFrom}</Text>
-                    <Text type="supporting" color="secondary" hasTabularNumbers>{item.timeTo} · {item.duration || '0'} min</Text>
-                </VStack>
-            ),
-        },
-        {
-            key: 'event',
-            header: 'Service flow',
-            width: proportional(2),
-            renderCell: (item) => (
-                <VStack gap={1.5}>
-                    <HStack gap={1.5} vAlign="center">
-                        <Text weight="semibold">{item.event}</Text>
-                        {item.isCustom || item.isNew ? <Badge label="Native" variant="info" /> : null}
-                    </HStack>
-                    {item.remarks && !isLegacyServiceDetailRemark(item) ? (
-                        <Text type="supporting" color="secondary" maxLines={2}>{item.remarks}</Text>
-                    ) : null}
-                    {renderContentControl(item)}
-                </VStack>
-            ),
-        },
-        {
-            key: 'host',
-            header: 'Owner',
-            width: proportional(1),
-            renderCell: (item) => <Text color={item.host ? 'primary' : 'secondary'}>{item.host || 'Unassigned'}</Text>,
-        },
-        {
-            key: 'actions',
-            header: '',
-            width: pixel(188),
-            align: 'end',
-            resizable: false,
-            renderCell: (item) => {
-                const index = computedSchedule.findIndex((current) => current.id === item.id);
-                return (
-                    <HStack gap={0.5} hAlign="end">
-                        <IconButton label={`Move ${item.event} up`} icon={<Icon icon={ArrowUp} />} variant="ghost" size="sm" isDisabled={index <= 0} onClick={() => handleMove(index, -1)} />
-                        <IconButton label={`Move ${item.event} down`} icon={<Icon icon={ArrowDown} />} variant="ghost" size="sm" isDisabled={index === computedSchedule.length - 1} onClick={() => handleMove(index, 1)} />
-                        <IconButton label={`Duplicate ${item.event}`} icon={<Icon icon={Copy} />} variant="ghost" size="sm" onClick={() => handleDuplicate(item)} />
-                        <IconButton label={`Edit ${item.event}`} icon={<Icon icon={Pencil} />} variant="ghost" size="sm" onClick={() => openEdit(item)} />
-                        <IconButton label={`Remove ${item.event}`} icon={<Icon icon={Trash2} />} variant="ghost" size="sm" onClick={() => setDeletingItem(item)} />
-                    </HStack>
-                );
-            },
-        },
-    ];
-
     if (isLoading) {
         return (
             <Layout content={<LayoutContent padding={6}><ProgressBar label="Loading service planner" isIndeterminate /></LayoutContent>} />
         );
     }
 
-    if (!sheetData || !weekData) {
+    if (!sheetData || !savedWeekData || !draftWeekData) {
         return (
             <Layout content={<LayoutContent padding={6}><Banner status="error" title="Unable to open the service planner" description={error || 'Service data is unavailable.'} /></LayoutContent>} />
         );
@@ -522,9 +700,7 @@ export default function ServicePlanner() {
     const detailsEditor = (
         <ServiceDetails
             details={details}
-            isSaving={isSaving}
             onDetailsChange={setDetails}
-            onSaveDetails={handleSaveDetails}
         />
     );
 
@@ -538,20 +714,28 @@ export default function ServicePlanner() {
                             <VStack gap={1}>
                                 <HStack gap={2} vAlign="center" wrap="wrap">
                                     <Heading level={1}>Service planner</Heading>
-                                    <Badge label={weekData.status === 'published' ? 'Published' : 'Draft'} variant={weekData.status === 'published' ? 'success' : 'warning'} />
+                                    <Badge
+                                        label={hasUnsavedChanges ? 'Unsaved changes' : savedWeekData.status === 'published' ? 'Published' : 'Draft'}
+                                        variant={hasUnsavedChanges ? 'warning' : savedWeekData.status === 'published' ? 'success' : 'neutral'}
+                                    />
                                 </HStack>
                                 <HStack gap={2} vAlign="center" wrap="wrap">
-                                    <StatusDot variant={weekData.status === 'published' ? 'success' : 'warning'} label={weekData.status === 'published' ? 'Published' : 'Draft changes'} />
+                                    <StatusDot
+                                        variant={hasUnsavedChanges ? 'warning' : savedWeekData.status === 'published' ? 'success' : 'neutral'}
+                                        label={hasUnsavedChanges ? 'Changes stay local until saved' : savedWeekData.status === 'published' ? 'Published' : 'Saved draft'}
+                                    />
                                     <Text type="supporting" color="secondary">Week {weekKey}</Text>
-                                    {weekData.publishedAt ? (
-                                        <Text type="supporting" color="secondary">· Published <Timestamp value={weekData.publishedAt} format="relative" isLive /></Text>
+                                    {savedWeekData.publishedAt ? (
+                                        <Text type="supporting" color="secondary">· Published <Timestamp value={savedWeekData.publishedAt} format="relative" isLive /></Text>
                                     ) : null}
                                 </HStack>
                             </VStack>
                             <HStack gap={2} vAlign="center" wrap="wrap">
                                 <Button label="Reset" variant="ghost" icon={<Icon icon={RotateCcw} />} onClick={() => setIsResetOpen(true)} />
                                 <Button label="Preview" variant="secondary" icon={<Icon icon={Eye} />} href="/" target="_blank" />
-                                <Button label="Publish" variant="primary" icon={<Icon icon={Send} />} onClick={handlePublish} isLoading={isSaving} />
+                                <Button label="Discard changes" variant="ghost" onClick={handleDiscardChanges} isDisabled={!hasUnsavedChanges || isSaving} />
+                                <Button label="Save changes" variant="primary" onClick={handleSaveChanges} isLoading={isSaving} isDisabled={!hasUnsavedChanges} />
+                                <Button label="Publish" variant="secondary" icon={<Icon icon={Send} />} onClick={handlePublish} isDisabled={hasUnsavedChanges || isSaving} />
                             </HStack>
                         </HStack>
                     </LayoutHeader>
@@ -559,12 +743,13 @@ export default function ServicePlanner() {
                 content={
                     <LayoutContent padding={4}>
                         <VStack gap={3}>
-                            <Banner
-                                status="info"
-                                title="Choose this service’s content"
-                                description="Choose songs and announcements from their service rows, then publish the service to update the public OS."
-                                isDismissable
-                            />
+                            {hasUnsavedChanges ? (
+                                <Banner
+                                    status="warning"
+                                    title="Unsaved planner changes"
+                                    description="Review the service, then save once. Publish becomes available after the draft is saved."
+                                />
+                            ) : null}
                             {success ? <Banner status="success" title={success} isDismissable onDismiss={() => setSuccess(undefined)} /> : null}
                             {error ? <Banner status="error" title="Changes were not saved" description={error} isDismissable onDismiss={() => setError(undefined)} /> : null}
                             {isMobile ? (
@@ -581,50 +766,73 @@ export default function ServicePlanner() {
                                 </VStack>
                                 <Button label="Add item" variant="secondary" icon={<Icon icon={Plus} />} onClick={openCreate} />
                             </HStack>
-                            {isMobile ? (
-                                computedSchedule.length ? (
-                                    <List density="compact" hasDividers>
-                                        {computedSchedule.map((item, index) => {
-                                            const contentKind = getServiceContentKind(item);
-                                            return (
-                                                <ListItem
-                                                    key={item.id}
-                                                    label={item.event}
-                                                    description={
-                                                        <VStack gap={1.5}>
-                                                            <Text type="supporting" color="secondary" hasTabularNumbers>
-                                                                {item.timeFrom}–{item.timeTo} · {item.duration || '0'} min{item.host ? ` · ${item.host}` : ''}
-                                                            </Text>
-                                                            {renderContentControl(item)}
-                                                        </VStack>
-                                                    }
-                                                    startContent={<Text weight="semibold" hasTabularNumbers>{String(index + 1).padStart(2, '0')}</Text>}
-                                                    endContent={
-                                                        <HStack gap={0.5}>
-                                                            <IconButton label={`Move ${item.event} up`} tooltip="Move up" icon={<Icon icon={ArrowUp} />} variant="ghost" size="sm" isDisabled={index === 0} onClick={() => handleMove(index, -1)} />
-                                                            <IconButton label={`Move ${item.event} down`} tooltip="Move down" icon={<Icon icon={ArrowDown} />} variant="ghost" size="sm" isDisabled={index === computedSchedule.length - 1} onClick={() => handleMove(index, 1)} />
-                                                            <IconButton label={`Edit ${item.event}`} tooltip="Edit" icon={<Icon icon={Pencil} />} variant="ghost" size="sm" onClick={() => openEdit(item)} />
-                                                        </HStack>
-                                                    }
-                                                    onClick={contentKind ? undefined : () => openEdit(item)}
-                                                />
-                                            );
-                                        })}
-                                    </List>
-                                ) : (
-                                    <EmptyState title="No service items" description="Add the first item to build this service." actions={<Button label="Add item" variant="primary" onClick={openCreate} />} />
-                                )
+                            {computedSchedule.length ? (
+                                <DndContext
+                                    sensors={sensors}
+                                    collisionDetection={closestCenter}
+                                    onDragStart={handleRowDragStart}
+                                    onDragCancel={() => setActiveRowId(undefined)}
+                                    onDragEnd={handleRowDragEnd}
+                                >
+                                    <SortableContext items={computedSchedule.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+                                        {isMobile ? (
+                                            <List density="compact" hasDividers>
+                                                {computedSchedule.map((item, index) => (
+                                                    <SortablePlannerMobileItem
+                                                        key={item.id}
+                                                        item={item}
+                                                        index={index}
+                                                        count={computedSchedule.length}
+                                                        contentControl={renderContentControl(item)}
+                                                        onMove={handleMove}
+                                                        onDuplicate={handleDuplicate}
+                                                        onEdit={openEdit}
+                                                        onDelete={setDeletingItem}
+                                                    />
+                                                ))}
+                                            </List>
+                                        ) : (
+                                            <Table density="compact" dividers="rows" hasHover verticalAlign="top">
+                                                <TableHeader>
+                                                    <TableRow isHeaderRow>
+                                                        <TableHeaderCell>Order</TableHeaderCell>
+                                                        <TableHeaderCell>Time</TableHeaderCell>
+                                                        <TableHeaderCell>Service flow</TableHeaderCell>
+                                                        <TableHeaderCell>Owner</TableHeaderCell>
+                                                        <TableHeaderCell>Actions</TableHeaderCell>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {computedSchedule.map((item, index) => (
+                                                        <SortablePlannerTableRow
+                                                            key={item.id}
+                                                            item={item}
+                                                            index={index}
+                                                            count={computedSchedule.length}
+                                                            contentControl={renderContentControl(item)}
+                                                            onMove={handleMove}
+                                                            onDuplicate={handleDuplicate}
+                                                            onEdit={openEdit}
+                                                            onDelete={setDeletingItem}
+                                                        />
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        )}
+                                    </SortableContext>
+                                    <DragOverlay>
+                                        {activeRow ? (
+                                            <Card variant="default" padding={2}>
+                                                <HStack gap={2} vAlign="center">
+                                                    <Icon icon={GripVertical} color="secondary" />
+                                                    <Text weight="semibold">{activeRow.timeFrom} · {activeRow.event}</Text>
+                                                </HStack>
+                                            </Card>
+                                        ) : null}
+                                    </DragOverlay>
+                                </DndContext>
                             ) : (
-                                <Table
-                                    data={computedSchedule}
-                                    columns={columns}
-                                    idKey="id"
-                                    density="compact"
-                                    dividers="rows"
-                                    hasHover
-                                    verticalAlign="top"
-                                    emptyState={<EmptyState title="No service items" description="Add the first item to build this service." isCompact />}
-                                />
+                                <EmptyState title="No service items" description="Add the first item to build this service." actions={<Button label="Add item" variant="primary" onClick={openCreate} />} />
                             )}
                         </VStack>
                     </LayoutContent>
@@ -642,9 +850,9 @@ export default function ServicePlanner() {
                     selectedIds={selectedIdsForKind(contentPickerKind)}
                     isOpen
                     isMobile={isMobile}
-                    isSaving={isSaving}
                     onClose={() => setContentPickerKind(null)}
-                    onSave={(selectedIds) => handleSaveContentSelection(contentPickerKind, selectedIds)}
+                    onApply={(selectedIds) => applyContentSelection(contentPickerKind, selectedIds)}
+                    onItemCreated={(item) => handleLibraryItemCreated(contentPickerKind, item)}
                 />
             ) : null}
             <Dialog
@@ -690,8 +898,8 @@ export default function ServicePlanner() {
                                                 label={`Duplicate ${editingItem.event}`}
                                                 icon={<Icon icon={Copy} />}
                                                 variant="ghost"
-                                                clickAction={async () => {
-                                                    await handleDuplicate(editingItem);
+                                                onClick={() => {
+                                                    handleDuplicate(editingItem);
                                                     setEditingItem(null);
                                                 }}
                                             />
